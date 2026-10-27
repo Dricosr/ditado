@@ -1,4 +1,4 @@
-#include "tray.h"
+﻿#include "tray.h"
 #include "log.h"
 #include <shellapi.h>
 
@@ -67,10 +67,10 @@ bool Init(HINSTANCE hi, const Actions& actions) {
   g_n.uCallbackMessage = WM_TRAY;
   g_n.hWnd = h;
   g_n.uID = 1;
-  g_n.hIcon = LoadIconW(nullptr, IDI_APPLICATION);  // temporário: ícone próprio no P5
+  g_n.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION));  // temporário: ícone próprio no P5
   wsprintfW(g_n.szTip, L"ditado");
   if (!Shell_NotifyIconW(NIM_ADD, &g_n)) {
-    log::Error("Shell_NotifyIcon(NIM_ADD) falhou: " + std::to_string(GetLastError()));
+    lg::Error("Shell_NotifyIcon(NIM_ADD) falhou: " + std::to_string(GetLastError()));
     return false;
   }
   return true;
@@ -90,3 +90,4 @@ void Balloon(const std::wstring& title, const std::wstring& msg) {
   Shell_NotifyIconW(NIM_MODIFY, &g_n);
 }
 }  // namespace tray
+

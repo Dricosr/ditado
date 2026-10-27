@@ -1,4 +1,4 @@
-#include "log.h"
+﻿#include "log.h"
 #include <windows.h>
 #include <fstream>
 #include <mutex>
@@ -24,7 +24,7 @@ std::wstring Day() {
 }
 }  // namespace
 
-namespace log {
+namespace lg {
 void Init(const std::wstring& dir) {
   std::lock_guard g(g_mu);
   g_dir = dir + L"\\logs";
@@ -46,4 +46,5 @@ void Write(Level lvl, const std::string& msg) {
   std::ofstream f(path, std::ios::app | std::ios::binary);
   if (f) f.write(line.data(), (std::streamsize)line.size());
 }
-}  // namespace log
+}  // namespace lg
+

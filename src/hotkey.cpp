@@ -1,4 +1,5 @@
-#include "hotkey.h"
+﻿#include "hotkey.h"
+#include "log.h"
 #include <cctype>
 #include <map>
 #include <vector>
@@ -42,7 +43,7 @@ Parsed Parse(const std::string& combo) {
     else if (t == "alt") p.need_alt = true;
     else if (t == "win") p.need_win = true;
     else if (UINT vk = Vk1(t)) p.vks.push_back(vk);
-    else log::Warn("combo: trecho desconhecido '" + t + "'");
+    else lg::Warn("combo: trecho desconhecido '" + t + "'");
     if (j == std::string::npos) break;
     i = j + 1;
   }
@@ -73,7 +74,7 @@ bool Start(const std::string& combo, const std::function<void(const KeyEvent&)>&
   g_cb = cb;
   g_p = Parse(combo);
   g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LL, GetModuleHandleW(nullptr), 0);
-  if (!g_hook) log::Error("SetWindowsHookEx(WH_KEYBOARD_LL) falhou: " + std::to_string(GetLastError()));
+  if (!g_hook) lg::Error("SetWindowsHookEx(WH_KEYBOARD_LL) falhou: " + std::to_string(GetLastError()));
   return g_hook != nullptr;
 }
 void Stop() {
@@ -88,3 +89,4 @@ bool SetCombo(const std::string& combo) {
   return !was ? (g_cb = cb, false) : Start(combo, cb);
 }
 }  // namespace hotkey
+

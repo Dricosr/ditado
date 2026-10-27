@@ -1,7 +1,8 @@
-#include "config.h"
+﻿#include "config.h"
 #include "log.h"
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -53,7 +54,7 @@ Config Config::Load() {
   std::ifstream f(Config::Dir() + L"\\config.json", std::ios::binary);
   if (!f) { c.Save(); return c; }  // primeira execução: cria com defaults
   json j = json::parse(f, nullptr, false);
-  if (j.is_discarded()) { log::Error("config.json ilegível — usando defaults"); return c; }
+  if (j.is_discarded()) { lg::Error("config.json ilegível — usando defaults"); return c; }
   if (j.contains("url")) c.url = W(j["url"].get<std::string>());
   GetB(j, "palavras", c.palavras);
   GetB(j, "mostrar_sem_fala", c.mostrar_sem_fala);
@@ -93,3 +94,4 @@ std::string Config::ToQuery() const {
   if (!prompt.empty()) q << "&prompt=" << Enc(prompt);
   return q.str();
 }
+

@@ -1,11 +1,13 @@
-#include "settings.h"
+﻿#include "settings.h"
 #include <windows.h>
+#include <format>
 #include <vector>
+#include "log.h"
 
 namespace {
 // Diálogo de opções construído na mão, em memória — zero .rc, zero frameworks de UI.
 // Sem DS_SETFONT: fontes dos controles ficam com o padrão do sistema (GUI font do SO).
-// Layout DLGTEMPLATE: style, exstyle, cdItems, x, y, cx, cy, menu, classe, título, depois os itens.
+// DLGTEMPLATE: style, exstyle, cdItems, x, y, cx, cy, menu, classe, título; itens idem.
 
 std::string A2U(const wchar_t* w) {
   int n = WideCharToMultiByte(CP_UTF8, 0, w, (int)lstrlenW(w), nullptr, 0, nullptr, nullptr);
@@ -23,17 +25,20 @@ void PushStr(std::vector<WORD>& v, const wchar_t* s) { while (*s) v.push_back(*s
 
 struct Builder {
   std::vector<WORD> w;
+  void Pad() { if (w.size() % 2) w.push_back(0); }  // DLGITEMTEMPLATE exige fronteira DWORD
   void Header(WORD nItems, DWORD style, const wchar_t* title) {
-    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), nItems, 6, 4, 248, 156, 0});  // x,y,cx,cy em DLUs
-    w.push_back(0);                                                                // menu
-    w.push_back(0xFFFF); w.push_back(0x0080);                                      // classe: "dialog"
-    PushStr(w, title);                                                             // título
+    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), 0, 0, nItems, 6, 4, 248, 156});  // 9 WORDs
+    w.push_back(0);        // menu: nenhum
+    w.push_back(0x0000);   // classe: a predefinida de diálogo (1 WORD — átomo 0x80 deu erro 1407)
+    PushStr(w, title);     // título
+    Pad();                 // alinha o primeiro item
   }
   void Item(DWORD style, WORD id, WORD cls, const wchar_t* title, int x, int y, int cx, int cy) {
-    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), (WORD)x, (WORD)y, (WORD)cx, (WORD)cy, id});
-    w.push_back(0xFFFF); w.push_back(cls);  // classe como átomo: 0x81 edit, 0x82 static, 0x84 combo, 0x80 button
-    if (title) PushStr(w, title);
-    else { w.push_back(0xFFFF); w.push_back(cls); }
+    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), 0, 0, (WORD)x, (WORD)y, (WORD)cx, (WORD)cy, id});  // 9 WORDs
+    w.push_back(0xFFFF); w.push_back(cls);  // classe do controle (0x80 button, 0x81 edit, 0x82 static, 0x84 combo)
+    if (title && *title) PushStr(w, title);
+    else { w.push_back(0xFFFF); w.push_back(0x00A0); }  // sem rótulo: átomo "static"
+    Pad();  // item seguinte também em fronteira DWORD
   }
 };
 
@@ -49,7 +54,7 @@ INT_PTR CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
       SetDlgItemTextW(h, 102, U2W(c->tecla).c_str());
       for (auto* m2 : {"small", "turbo", "large-v3"})
         SendDlgItemMessageW(h, 103, CB_ADDSTRING, 0, (LPARAM)U2W(m2).c_str());
-      SendDlgItemMessageW(h, 103, CB_SELECTSTRING, -1, (LPARAM)U2W(c->modelo).c_str());
+      SendDlgItemMessageW(h, 103, CB_SELECTSTRING, (WPARAM)(INT)-1, (LPARAM)U2W(c->modelo).c_str());
       SendDlgItemMessageW(h, 104, BM_SETCHECK, c->autostart ? BST_CHECKED : BST_UNCHECKED, 0);
       return TRUE;
     }
@@ -59,8 +64,8 @@ INT_PTR CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         wchar_t b[512];
         GetDlgItemTextW(h, 101, b, 500); c->url = b;
         GetDlgItemTextW(h, 102, b, 500); c->tecla = A2U(b);
-        SendMessageW(GetDlgItem(h, 103), CB_GETLBTEXT, (WPARAM)SendMessageW(GetDlgItem(h, 103), CB_GETCURSEL, 0, 0),
-                     (LPARAM)b);
+        SendMessageW(GetDlgItem(h, 103), CB_GETLBTEXT,
+                     (WPARAM)(INT)SendMessageW(GetDlgItem(h, 103), CB_GETCURSEL, 0, 0), (LPARAM)b);
         c->modelo = A2U(b);
         c->autostart = SendDlgItemMessageW(h, 104, BM_GETCHECK, 0, 0) == BST_CHECKED;
         EndDialog(h, IDOK);
@@ -71,28 +76,32 @@ INT_PTR CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
   }
   return FALSE;
 }
+
+HINSTANCE Own() {
+  wchar_t b[MAX_PATH];
+  GetModuleFileNameW(nullptr, b, MAX_PATH);
+  return (HINSTANCE)GetModuleHandleW(b);
+}
 }  // namespace
 
 namespace settings {
 void Show(HWND owner, Config& cfg) {
   Builder b;
-  b.Header(8, DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_CENTER, L"ditado — opções");
+  b.Header(9, DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_CENTER, L"ditado — opções");
   const DWORD E = WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | WS_BORDER;
   const DWORD L = WS_CHILD | WS_VISIBLE | SS_LEFT;
   b.Item(L, 0, 0x0082, L"Endereço do gate", 8, 8, 90, 8);
-  b.Item(E, 101, 0x0081, nullptr, 8, 18, 230, 12);
+  b.Item(E, 101, 0x0081, L"", 8, 18, 230, 12);
   b.Item(L, 0, 0x0082, L"Tecla (ex.: ctrl+shift+space)", 8, 36, 140, 8);
-  b.Item(E, 102, 0x0081, nullptr, 8, 46, 230, 12);
+  b.Item(E, 102, 0x0081, L"", 8, 46, 230, 12);
   b.Item(L, 0, 0x0082, L"Modelo", 8, 64, 40, 8);
-  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | CBS_NOINTEGRALSIZE, 103, 0x0084, nullptr, 8, 74, 100, 60);
+  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 103, 0x0084, L"", 8, 74, 100, 60);
   b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 104, 0x0080, L"Iniciar com o Windows", 120, 66, 110, 10);
   b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK, 0x0080, L"OK", 8, 138, 50, 14);
   b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL, 0x0080, L"Cancelar", 64, 138, 50, 14);
 
   Config copy = cfg;
-  INT_PTR r = DialogBoxIndirectParamW(
-      (HINSTANCE)GetWindowLongPtrW(owner ? owner : GetDesktopWindow(), GWLP_HINSTANCE), (DLGTEMPLATE*)b.w.data(),
-      owner, Proc, (LPARAM)&copy);
+  INT_PTR r = DialogBoxIndirectParamW(Own(), (DLGTEMPLATE*)b.w.data(), owner, Proc, (LPARAM)&copy);
   if (r == IDOK) cfg = copy;
 }
 }  // namespace settings
