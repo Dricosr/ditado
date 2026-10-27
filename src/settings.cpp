@@ -33,7 +33,7 @@ std::wstring Txt(HWND h) {
 
 LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
   static Config* cfg = nullptr;
-  static HWND e101, e102, e103, c104, c105;
+  static HWND e101, e102, e103, c104, c105, c106;
   static HFONT fnt = nullptr;
   switch (m) {
     case WM_CREATE: {
@@ -62,6 +62,9 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
       c104 = CreateWindowExW(0, L"BUTTON", L"Iniciar com o Windows", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
                              12, 112, 180, 22, h, (HMENU)104, nullptr, nullptr);
       SendMessageW(c104, WM_SETFONT, (WPARAM)f, TRUE);
+      c106 = CreateWindowExW(0, L"BUTTON", L"Log local (dev)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                             200, 112, 120, 22, h, (HMENU)106, nullptr, nullptr);
+      SendMessageW(c106, WM_SETFONT, (WPARAM)f, TRUE);
       Lbl(L"Dispositivo de captura", 330, 64);
       c105 = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL,
                              330, 82, 170, 200, h, (HMENU)105, nullptr, nullptr);
@@ -101,6 +104,7 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
       SetWindowTextW(e102, U2W(cfg->tecla).c_str());
       SendMessageW(e103, CB_SELECTSTRING, -1, (LPARAM)U2W(cfg->modelo).c_str());
       SendMessageW(c104, BM_SETCHECK, cfg->autostart ? BST_CHECKED : BST_UNCHECKED, 0);
+      SendMessageW(c106, BM_SETCHECK, cfg->log_local ? BST_CHECKED : BST_UNCHECKED, 0);
       auto Btn = [&](const wchar_t* t, int id, int x) {
         HWND e = CreateWindowExW(0, L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | (id == IDOK ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON),
                                  x, 150, 76, 24, h, (HMENU)(INT_PTR)id, nullptr, nullptr);
@@ -120,6 +124,7 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
           SendMessageW(e103, CB_GETLBTEXT, SendMessageW(e103, CB_GETCURSEL, 0, 0), (LPARAM)b);
           cfg->modelo = W2U(b);
           cfg->autostart = SendMessageW(c104, BM_GETCHECK, 0, 0) == BST_CHECKED;
+          cfg->log_local = SendMessageW(c106, BM_GETCHECK, 0, 0) == BST_CHECKED;
           {
             int sel = (int)SendMessageW(c105, CB_GETCURSEL, 0, 0);
             wchar_t* id = (wchar_t*)SendMessageW(c105, CB_GETITEMDATA, sel, 0);

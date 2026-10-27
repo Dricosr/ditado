@@ -61,6 +61,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
 
   g_cfg = Config::Load();
   lg::Init(Config::Dir());
+  lg::Verbose(g_cfg.log_local);
   const wchar_t* cmd = GetCommandLineW();
   bool selftest = wcsstr(cmd, L"--selftest") != nullptr;
   lg::Info(std::format("ditado {} iniciado — gate={}", DITADO_VERSION, U(g_cfg.url)));
@@ -76,9 +77,12 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
       est = Estado::Ocioso;
       audio::Stop();
       auto pcm = audio::Flush();
+      if (lg::Verbose())
+        lg::Info("entrada: tecla '" + g_cfg.tecla + "' solta — gravado " + std::to_string(pcm.size()) + " amostras de '" + g_cfg.dispositivo + "'");
       tray::SetTooltip(L"transcrevendo…");
       std::thread([pcm = std::move(pcm)] {
         std::string wav = audio::ToWav(pcm);
+        lg::Audio(wav);  // salva em <dir>\audio\ quando o log local está ligado
         auto r = gate::Transcrever(g_cfg, wav);
         if (r.ok && !r.semFala)
           inject::Texto(g_cfg, r.texto);
@@ -144,10 +148,11 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     tray::SetTooltip(L"configurando…");
     settings::Show(nullptr, c);
     if (c.url != g_cfg.url || c.tecla != g_cfg.tecla || c.modelo != g_cfg.modelo || c.autostart != g_cfg.autostart ||
-        c.dispositivo != g_cfg.dispositivo) {
+        c.dispositivo != g_cfg.dispositivo || c.log_local != g_cfg.log_local) {
       bool combo = c.tecla != g_cfg.tecla, start = c.autostart != g_cfg.autostart;
       g_cfg = c;
       g_cfg.Save();
+      lg::Verbose(g_cfg.log_local);
       if (combo) hotkey::SetCombo(g_cfg.tecla);
       if (start) SetAutostart(g_cfg.autostart);
       lg::Info("config salva");

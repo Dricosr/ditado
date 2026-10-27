@@ -8,6 +8,7 @@ struct Config {
   int min_silence_ms = 300, speech_pad_ms = 100, beam = 1, timeout_ms = 120000;
   float max_speech_s = 30.f;
   bool palavras = false, mostrar_sem_fala = false, autostart = false;
+  bool log_local = true;  // fase de dev: grava entradas, áudio, enviado e recebido (desativável na UI)
   std::string tecla = "ctrl+shift+space", dispositivo, metodo_insercao = "unicode";
   static Config Load();
   void Save() const;

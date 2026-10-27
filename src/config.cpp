@@ -59,6 +59,7 @@ Config Config::Load() {
   GetB(j, "palavras", c.palavras);
   GetB(j, "mostrar_sem_fala", c.mostrar_sem_fala);
   GetB(j, "autostart", c.autostart);
+  GetB(j, "log_local", c.log_local);
   Get(j, "idioma", c.idioma);   Get(j, "modelo", c.modelo);
   Get(j, "prompt", c.prompt);   Get(j, "app", c.app);
   Get(j, "tecla", c.tecla);     Get(j, "dispositivo", c.dispositivo);
@@ -78,7 +79,7 @@ void Config::Save() const {
   j["palavras"] = palavras; j["beam"] = beam; j["label"] = label; j["timeout_ms"] = timeout_ms;
   j["app"] = app; j["tecla"] = tecla; j["dispositivo"] = dispositivo;
   j["metodo_insercao"] = metodo_insercao; j["mostrar_sem_fala"] = mostrar_sem_fala;
-  j["autostart"] = autostart;
+  j["autostart"] = autostart; j["log_local"] = log_local;
   std::wstring p = Dir() + L"\\config.json", tmp = p + L".tmp";
   { std::ofstream f(tmp, std::ios::binary); f << j.dump(2); }
   MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);  // atômica: nunca corta no meio

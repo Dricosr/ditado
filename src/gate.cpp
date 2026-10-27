@@ -38,6 +38,8 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
     InternetCloseHandle(s);
     return r;
   }
+  if (lg::Verbose())
+    lg::Info("→ enviado: POST " + std::string(url.begin(), url.end()) + " corpo=" + std::to_string(wav.size()) + " bytes");
   HINTERNET c = InternetConnectW(s, u.lpszHostName, u.nPort, nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
   HINTERNET req = c ? HttpOpenRequestW(c, L"POST", u.lpszUrlPath, nullptr, nullptr, nullptr,
                                        INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION, 0)
@@ -51,6 +53,7 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
       while (InternetReadFile(req, b, sizeof b, &got) && got) body.append(b, got);
       json j = json::parse(body, nullptr, false);
       if (j.is_discarded()) j = json::object();
+      if (lg::Verbose()) lg::Info("← recebido: " + (body.size() > 2000 ? body.substr(0, 2000) + "…" : body));
       if (j.contains("error")) r.erro = j["error"].get<std::string>();
       if (j.contains("detail")) r.detail = j["detail"].get<std::string>();
       if (j.contains("jobId")) r.jobId = j["jobId"].get<std::string>();
