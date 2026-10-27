@@ -1,0 +1,6 @@
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\T.exe
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\T.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\T.deps.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\T.runtimeconfig.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\T.pdb
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\publish\System.Speech.dll

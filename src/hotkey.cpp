@@ -30,6 +30,15 @@ UINT Vk1(const std::string& t) {  // "a"->A, "f1"->VK_F1, "space"...
 }
 
 bool Mod(UINT vk) { return vk == VK_CONTROL || vk == VK_SHIFT || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN; }
+UINT Base(UINT vk) {  // L/R → código base, p/ o hook bater com o combo configurado
+  switch (vk) {
+    case VK_LCONTROL: case VK_RCONTROL: return VK_CONTROL;
+    case VK_LSHIFT:   case VK_RSHIFT:   return VK_SHIFT;
+    case VK_LMENU:    case VK_RMENU:    return VK_MENU;
+    case VK_LWIN:     case VK_RWIN:     return VK_LWIN;
+    default: return vk;
+  }
+}
 
 Parsed Parse(const std::string& combo) {
   Parsed p;
@@ -57,8 +66,8 @@ LRESULT CALLBACK LL(int code, WPARAM w, LPARAM l) {
     auto& k = *(KBDLLHOOKSTRUCT*)l;
     bool down = !(k.flags & LLKHF_UP);
     bool mine = false;
-    for (UINT v : g_p.vks) {  // vks só contém a tecla não-modificadora do combo (letra/dígito/f1..f24/space...)
-      if (v == k.vkCode) mine = true;
+    for (UINT v : g_p.vks) {  // vks só contém a tecla não-modificadora do combo; vkCode de letra já é base ✓
+      if (v == k.vkCode || v == Base(k.vkCode)) mine = true;
     }
     bool mods_ok = (!g_p.need_ctrl || Down(VK_CONTROL)) && (!g_p.need_shift || Down(VK_SHIFT)) &&
                    (!g_p.need_alt || Down(VK_MENU)) && (!g_p.need_win || Down(VK_LWIN));

@@ -11,6 +11,9 @@ add_executable(ditado WIN32
   src/tray.cpp
   src/hotkey.cpp
   src/settings.cpp
+  src/audio.cpp
+  src/gate.cpp
+  src/inject.cpp
 )
 target_include_directories(ditado PRIVATE src ${CMAKE_BINARY_DIR}/gen third_party)
 target_link_libraries(ditado PRIVATE

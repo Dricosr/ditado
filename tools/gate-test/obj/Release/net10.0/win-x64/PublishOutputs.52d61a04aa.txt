@@ -1,0 +1,6 @@
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\T.exe
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\T.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\T.deps.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\T.runtimeconfig.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\T.pdb
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\pub\System.Speech.dll

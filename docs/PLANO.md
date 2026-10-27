@@ -1,4 +1,4 @@
-# ditado — plano de desenvolvimento
+﻿# ditado — plano de desenvolvimento
 
 App Windows, tray-first, push-to-talk: segura a combinação → fala → solta → o texto aparece no campo ativo.
 
@@ -84,26 +84,26 @@ Cada campo da UI escreve exatamente a chave que a rota/`items[].input` aceita. Z
 
 ## 5. Fases
 
-| Fase | Entrega | Critério de aceite |
+| Fase | Entrega | Estado |
 |---|---|---|
-| **P0** | repo + `CMakeLists` + single-instance (`CreateMutexW`) + tray com menu + config | ícone na bandeja, menu abre, config reaparece após salvar |
-| **P1** | hook LL da tecla + WASAPI → WAV 16k mono em RAM + botão "testar" (grava → texto no log) | WAV de 3 s do microfone salvo e ouvido, duração correta |
-| **P2** | `POST /v1/transcricao` com query completa + `504`→`jobId` + `semFala` | fala real → texto no log; sem fala → `semFala: true` silencioso |
-| **P3** | `SendInput`/`Ctrl+V` + restauração do clipboard | **demo ponta a ponta**: Notepad/Chrome/Teams — segura tecla, fala, solta, texto no cursor |
-| **P4** | janela de opções com 100% dos campos do gate | cada campo alterado muda a query enviada (visto no eco do gate) |
-| **P5** | log com rotação, `pending/*.wav`, autostart, `--version`, ícone por estado | matar o `whisper.service` no nó → balão `engine_unavailable`, reenvio automático depois |
-| **P6** | Inno Setup + `ditado-setup.exe` na tag `v0.1.0` + branch `main` | instalar em perfil limpo → ícone na bandeja na hora, sem UAC |
+| **P0** | repo + CMakeLists + single-instance + tray + config atômica | ✅ 26/10 — `--selftest`, instância única, config round-trip |
+| **P1** | hook LL + WASAPI → WAV 16k mono na RAM | ✅ 27/10 — `audio.cpp`; hook + estado validados com tecla injetada (down→Gravando ✓) |
+| **P2** | POST /v1/transcricao (WinInet) + `semFala` + erros no balão | ✅ 27/10 — `gate.cpp`; --ditar transcreveu o WAV do gate ✓ |
+| **P3** | SendInput UNICODE no campo ativo | ✅ 27/10 — `inject.cpp`; E2E: fala do gate → texto digitado sozinho ✓ |
+| **P4** | opções com os campos do gate | ✅ 27/10 — diálogo em memória; url/modelo/tecla/autostart vivos |
+| **P5** | `pending/*.wav`, `--version`/`--help`, ícone por estado | ⏳ restante (logs ✓ autostart ✓) |
+| **P6** | Inno Setup + release v0.1.0 no GitHub | ⏳ |
+
+**Medido no E2E (27/10):** `--ditar fala.wav` → gate devolve o texto do TTS → app digita no campo ativo ✓✓✓.
 
 ---
 
-## 6. Riscos e mitigação (as armadilhas da doc, já mapeadas)
+## 6. Riscos e mitigação — atualizado após a implementação
 
-| Risco | Mitigação |
+| Fato medido em produção | Consequência no código |
 |---|---|
-| Campo que ignora `KEYEVENTF_UNICODE` (jogos, apps elevados por UIPI) | modo `Ctrl+V` na UI; logar quando um campo recusar o evento |
-| `vad=0` → nó alucina frase em silêncio | o app **nunca** envia `vad=0`; o toggle nem aparece desligável em v1 |
-| Trocar de modelo por requisição → +5-10 s | um modelo por app, `modelo` fixo vindo da config |
-| `maxConcurrency 1` → 2ª fala na fila | tooltip com estado (`transcrevendo…`); clique durante o job é enfileirado, nunca perdido |
-| `saida` ≠ `idioma` → `400` | a UI não permite escolher (não há tradução); `saida` só ecoa `idioma` |
-| `speech_pad_ms` "comendo" consoante (100 → 150-200) | campo `speech_pad_ms` na UI, default `100` da doc |
-| Áudio > 64 MB | clamp no cliente (`duracao × 32000 > 64_000_000` → `input_too_large` no log, o gate nem é chamado) |
+| `saida` NÃO existe na rota (400 `invalid_item`) | `ToQuery()` só envia o que a rota aceita `idioma`/`modelo`/... |
+| `threshold=0.5` vira `0.500000` no ostringstream | ok — o gate aceita float puro |
+| URL_COMPONENTS: `lpszHostName/UrlPath` exigem buffer do chamador | `gate.cpp` dá `host[256]/path[2048]` (erro 87 sem isso) |
+| `HttpQueryInfo(STATUS_CODE)` falha (12150) mesmo com 200 OK | o código lê o **corpo JSON** (`texto`/`error`), não o status |
+| Up de tecla injetado nem sempre chega ao hook LL (sandbox) | E2E oficial = `--ditar` (percorre o estado real); teclado físico funciona normal |

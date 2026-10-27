@@ -1,0 +1,17 @@
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\T.exe
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\T.deps.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\T.runtimeconfig.json
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\T.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\T.pdb
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\bin\Release\net10.0\win-x64\System.Speech.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.csproj.AssemblyReference.cache
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.GeneratedMSBuildEditorConfig.editorconfig
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.AssemblyInfoInputs.cache
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.AssemblyInfo.cs
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.csproj.CoreCompileInputs.cache
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.csproj.Up2Date
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\refint\T.dll
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.pdb
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\T.genruntimeconfig.cache
+E:\Cloud\Git\ai_projects\ditado\tools\gate-test\obj\Release\net10.0\win-x64\ref\T.dll

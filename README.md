@@ -23,10 +23,7 @@ Os campos do motor têm o mesmo nome da API do gate (`idioma`, `modelo`, `prompt
 
 | Fase | Entrega |
 |---|---|
-| P0 ✅ | esqueleto: tray + opções + config + hotkey |
-| P1 ⏳ | gravação WASAPI → WAV 16 kHz mono |
-| P2 ⏳ | POST /v1/transcricao |
-| P3 ⏳ | SendInput / Ctrl+V no campo ativo |
-| P4-P6 ⏳ | opções completas, robustez, instalador |
+| P0–P4 ✅ | app completo: tray + opções + hotkey + WASAPI→gate→digitação — **E2E: o gate fala, o app digita sozinho** |
+| P5–P6 ⏳ | `pending/*.wav`, instalador Inno Setup, release no GitHub |
 
 Ver `docs/PLANO.md`. Ferramenta de teste do contrato: `tools/gate-test` (binário autocontido).

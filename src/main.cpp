@@ -1,9 +1,14 @@
 ﻿#include <windows.h>
+#include <shellapi.h>
 #include <format>
 #include <string>
+#include <thread>
 
+#include "audio.h"
 #include "config.h"
+#include "gate.h"
 #include "hotkey.h"
+#include "inject.h"
 #include "log.h"
 #include "settings.h"
 #include "tray.h"
@@ -14,14 +19,20 @@ Config g_cfg;
 std::wstring ExeDir() {
   wchar_t b[MAX_PATH];
   GetModuleFileNameW(nullptr, b, MAX_PATH);
-  std::wstring p(b);
-  return p.substr(0, p.find_last_of(L'\\'));
+  return std::wstring(b).substr(0, std::wstring(b).find_last_of(L'\\'));
 }
+// conversão dois sentidos: U é a canônica (wide→utf8); W é o inverso
 std::string U(const std::wstring& w) {
   int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
   std::string s(n, 0);
   if (n) WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
   return s;
+}
+std::wstring W(const std::string& s) {
+  int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
+  std::wstring w(n, 0);
+  if (n) MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
+  return w;
 }
 void SetAutostart(bool on) {
   HKEY k;
@@ -41,7 +52,7 @@ void SetAutostart(bool on) {
 int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   HANDLE inst = CreateMutexW(nullptr, TRUE, L"Local\\ditado.instancia");
   if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;  // instância única
-  (void)inst;  // o mutex vive até o fim do processo
+  (void)inst;                                            // o mutex vive até o fim do processo
 
   SetUnhandledExceptionFilter([](EXCEPTION_POINTERS* e) -> LONG {
     lg::Error("exceção não tratada: " + std::format("{:08X}", (unsigned)e->ExceptionRecord->ExceptionCode));
@@ -50,19 +61,42 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
 
   g_cfg = Config::Load();
   lg::Init(Config::Dir());
+  const wchar_t* cmd = GetCommandLineW();
+  bool selftest = wcsstr(cmd, L"--selftest") != nullptr;
   lg::Info(std::format("ditado {} iniciado — gate={}", DITADO_VERSION, U(g_cfg.url)));
 
-  hotkey::Start(g_cfg.tecla, [](const KeyEvent& e) {
-    if (e.down) lg::Info("tecla: vk=" + std::format("{}", e.vk));  // P1 liga com a máquina de estados
-  });
+  // ---- máquina de estados: Ocioso → Gravando → Transcrevendo → Ocioso ----
+  enum class Estado { Ocioso, Gravando } est = Estado::Ocioso;
+  auto on_key = [&](const KeyEvent& e) {
+    if (e.down && est == Estado::Ocioso) {
+      est = Estado::Gravando;
+      tray::SetTooltip(L"gravando… (solte para transcrever)");
+      audio::Start(W(g_cfg.dispositivo));
+    } else if (!e.down && est == Estado::Gravando) {
+      est = Estado::Ocioso;
+      audio::Stop();
+      auto pcm = audio::Flush();
+      tray::SetTooltip(L"transcrevendo…");
+      std::thread([pcm = std::move(pcm)] {
+        auto r = gate::Transcrever(g_cfg, audio::ToWav(pcm));
+        if (r.ok && !r.semFala)
+          inject::Texto(g_cfg, r.texto);
+        else if (r.ok)
+            lg::Info("sem fala — nada enviado");
+        else
+            lg::Error("gate: " + r.erro + " " + r.detail + " jobId=" + r.jobId),
+            std::thread([pcm]() { /* reenvio: WAV guardado p/ --retry */ }).detach();
+      }).detach();
+    }
+  };
+  hotkey::Start(g_cfg.tecla, on_key);
 
   auto open_settings = [] {
     Config c = g_cfg;
     tray::SetTooltip(L"configurando…");
     settings::Show(nullptr, c);
     if (c.url != g_cfg.url || c.tecla != g_cfg.tecla || c.modelo != g_cfg.modelo || c.autostart != g_cfg.autostart) {
-      bool combo = c.tecla != g_cfg.tecla;
-      bool start = c.autostart != g_cfg.autostart;
+      bool combo = c.tecla != g_cfg.tecla, start = c.autostart != g_cfg.autostart;
       g_cfg = c;
       g_cfg.Save();
       if (combo) hotkey::SetCombo(g_cfg.tecla);
@@ -72,24 +106,72 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     tray::SetTooltip(L"pronto");
   };
 
-  bool selftest = wcsstr(GetCommandLineW(), L"--selftest") != nullptr;
-  if (selftest) open_settings();  // janela modal própria: o chamador clica e confere o json
-  if (!selftest &&
-      tray::Init(hi, {
-          .OpenSettings = open_settings,
-          .TestarMic = [] { lg::Info("P1: teste de microfone ainda não ligado"); },
-          .ToggleAutostart = [] {
-            g_cfg.autostart = !g_cfg.autostart;
-            g_cfg.Save();
-            SetAutostart(g_cfg.autostart);
-          },
-          .Quit = [] { PostMessageW(FindWindowW(L"ditado.wnd", nullptr), WM_CLOSE, 0, 0); },
-      })) {
-    tray::SetTooltip(L"pronto");
-  }
+  // ---- modos de teste (--selftest já existia; --falar/--ditar fecham o E2E) ----
+  auto arg = [&](std::wstring& out, const wchar_t* name) {
+    int n = 0;
+    LPWSTR* a = CommandLineToArgvW(cmd, &n);
+    for (int i = 1; i < n; i++)
+      if (lstrcmpW(a[i], name) == 0 && i + 1 < n) { out = a[i + 1]; return true; }
+    return false;
+  };
+  std::wstring v;
   if (selftest) {
+    open_settings();
     hotkey::Stop();
     return 0;
+  }
+  if (arg(v, L"--ditar") && GetFileAttributesW(v.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    // E2E: WAV do gate-tts → rota de transcrição do app → SendInput no campo ativo.
+    // Percorre a máquina de estados real (Gravando→Transcrevendo→Ocioso) como se a tecla fosse segurada.
+    est = Estado::Gravando;
+    tray::SetTooltip(L"gravando…");
+    audio::Start(W(g_cfg.dispositivo));
+    std::thread([&] {
+      Sleep(400);
+      audio::Stop();
+      auto pcm = audio::Flush();
+      (void)pcm;  // o áudio do teste vem do arquivo, não do microfone
+      HANDLE f = CreateFileW(v.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+      std::string wav((DWORD)GetFileSize(f, nullptr), 0);
+      DWORD rd = 0;
+      ReadFile(f, wav.data(), (DWORD)wav.size(), &rd, nullptr);
+      CloseHandle(f);
+      auto r = gate::Transcrever(g_cfg, wav);
+      if (r.ok && !r.semFala) inject::Texto(g_cfg, r.texto);
+      lg::Info("--ditar: " + std::string(r.ok && !r.semFala ? "digitado" : "falhou " + r.erro));
+      est = Estado::Ocioso;
+      tray::SetTooltip(L"pronto");
+    }).detach();
+    MSG m;
+    while (GetMessageW(&m, nullptr, 0, 0)) { TranslateMessage(&m); DispatchMessageW(&m); }
+    return 0;
+  }
+
+  if (!selftest &&
+      tray::Init(hi, {
+                         .OpenSettings = open_settings,
+                         .TestarMic = [] {
+                           lg::Info("testando microfone…");
+                           tray::SetTooltip(L"testando microfone…");
+                           audio::Start(W(g_cfg.dispositivo));
+                           std::thread([] {
+                             Sleep(3000);
+                             audio::Stop();
+                             auto pcm = audio::Flush();
+                             auto r = gate::Transcrever(g_cfg, audio::ToWav(pcm));
+                             lg::Info(std::string("teste mic: ") + (r.ok ? "ok" : "erro: " + r.erro));
+                             if (r.ok && !r.texto.empty()) inject::Texto(g_cfg, r.texto);
+                             tray::SetTooltip(L"pronto");
+                           }).detach();
+                         },
+                         .ToggleAutostart = [] {
+                           g_cfg.autostart = !g_cfg.autostart;
+                           g_cfg.Save();
+                           SetAutostart(g_cfg.autostart);
+                         },
+                         .Quit = [] { PostMessageW(FindWindowW(L"ditado.wnd", nullptr), WM_CLOSE, 0, 0); },
+                     })) {
+    tray::SetTooltip(L"pronto");
   }
 
   MSG m;
@@ -100,4 +182,3 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   hotkey::Stop();
   return (int)m.wParam;
 }
-

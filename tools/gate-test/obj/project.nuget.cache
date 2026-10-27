@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "AqRY7N0G4Os=",
+  "success": true,
+  "projectFilePath": "E:\\Cloud\\Git\\ai_projects\\ditado\\tools\\gate-test\\T.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\drico\\.nuget\\packages\\system.speech\\10.0.5\\system.speech.10.0.5.nupkg.sha512"
+  ],
+  "logs": []
+}
