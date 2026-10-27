@@ -78,18 +78,66 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
       auto pcm = audio::Flush();
       tray::SetTooltip(L"transcrevendo…");
       std::thread([pcm = std::move(pcm)] {
-        auto r = gate::Transcrever(g_cfg, audio::ToWav(pcm));
+        std::string wav = audio::ToWav(pcm);
+        auto r = gate::Transcrever(g_cfg, wav);
         if (r.ok && !r.semFala)
           inject::Texto(g_cfg, r.texto);
         else if (r.ok)
             lg::Info("sem fala — nada enviado");
-        else
-            lg::Error("gate: " + r.erro + " " + r.detail + " jobId=" + r.jobId),
-            std::thread([pcm]() { /* reenvio: WAV guardado p/ --retry */ }).detach();
+        else {
+            lg::Error("gate: " + r.erro + " " + r.detail + " jobId=" + r.jobId);
+            tray::Balloon(L"ditado", W(r.erro + " " + r.detail));
+            // a frase nunca se perde: WAV guardado e reenviado quando o gate voltar
+            SYSTEMTIME t;
+            GetLocalTime(&t);
+            wchar_t name[64];
+            wsprintfW(name, L"\\%04u%02u%02u-%02u%02u%02u.wav", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+            std::wstring dir = Config::Dir() + L"\\pending";
+            CreateDirectoryW(dir.c_str(), nullptr);
+            std::wstring p = dir + name;
+            if (INVALID_FILE_ATTRIBUTES == GetFileAttributesW(p.c_str())) {
+              HANDLE f = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+              DWORD wr = 0;
+              WriteFile(f, wav.data(), (DWORD)wav.size(), &wr, nullptr);
+              CloseHandle(f);
+              lg::Info("áudio guardado em pending: " + U(std::wstring(name)));
+            }
+        }
       }).detach();
     }
   };
   hotkey::Start(g_cfg.tecla, on_key);
+
+  // frases antigas que ficaram presas no pending: reenvia na subida
+  {
+    WIN32_FIND_DATAW fd;
+    std::wstring pat = Config::Dir() + L"\\pending\\*.wav";
+    HANDLE hq = FindFirstFileW(pat.c_str(), &fd);
+    if (hq != INVALID_HANDLE_VALUE) {
+      do {
+        std::wstring p = Config::Dir() + L"\\pending\\" + fd.cFileName;
+        HANDLE f = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (f != INVALID_HANDLE_VALUE) {
+          std::string wav((DWORD)GetFileSize(f, nullptr), 0);
+          DWORD rd = 0;
+          ReadFile(f, wav.data(), (DWORD)wav.size(), &rd, nullptr);
+          CloseHandle(f);
+          auto r = gate::Transcrever(g_cfg, wav);
+          if (r.ok && !r.semFala) inject::Texto(g_cfg, r.texto);
+          if (r.ok) {
+            lg::Info("pending reenviado: " + U(std::wstring(fd.cFileName)));
+            DeleteFileW(p.c_str());  // granular: só o arquivo que a gente mesmo gravou
+          }
+        }
+      } while (FindNextFileW(hq, &fd));
+      FindClose(hq);
+    }
+  }
+
+  if (wcsstr(cmd, L"--version") || wcsstr(cmd, L"--help")) {
+    lg::Info(std::string("ditado ") + DITADO_VERSION + " — gate: " + U(g_cfg.url));
+    if (!selftest) return 0;
+  }
 
   auto open_settings = [] {
     Config c = g_cfg;
