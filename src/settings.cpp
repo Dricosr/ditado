@@ -85,7 +85,7 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (FAILED(coll->Item(i, &d))) continue;
             wchar_t* id = nullptr; d->GetId(&id);
             IPropertyStore* ps = nullptr; wchar_t nm[128] = L"(sem nome)";
-            if (SUCCEEDED(d->Activate(__uuidof(IPropertyStore), CLSCTX_ALL, nullptr, (void**)&ps))) {
+            if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
               PROPVARIANT pv; PropVariantInit(&pv);
               if (SUCCEEDED(ps->GetValue(PKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) wcscpy_s(nm, pv.pwszVal);
               PropVariantClear(&pv); ps->Release();
