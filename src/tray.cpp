@@ -67,7 +67,7 @@ bool Init(HINSTANCE hi, const Actions& actions) {
   g_n.uCallbackMessage = WM_TRAY;
   g_n.hWnd = h;
   g_n.uID = 1;
-  g_n.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION));  // temporário: ícone próprio no P5
+  g_n.hIcon = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(101), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);  // IDI_DITADO=101 (app.rc)
   wsprintfW(g_n.szTip, L"ditado");
   if (!Shell_NotifyIconW(NIM_ADD, &g_n)) {
     lg::Error("Shell_NotifyIcon(NIM_ADD) falhou: " + std::to_string(GetLastError()));

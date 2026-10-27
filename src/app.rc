@@ -1,0 +1,2 @@
+﻿#define IDI_DITADO 101
+IDI_DITADO ICON "icon.ico"

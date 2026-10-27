@@ -151,7 +151,7 @@ namespace settings {
 void Show(HWND owner, Config& cfg) {
   static bool once = false;
   if (!once) {
-    WNDCLASSEXW wc{.cbSize = sizeof(wc), .lpfnWndProc = Wnd, .hInstance = GetModuleHandleW(nullptr), .lpszClassName = L"ditado.opcoes"};
+    WNDCLASSEXW wc{.cbSize = sizeof(wc), .lpfnWndProc = Wnd, .hInstance = GetModuleHandleW(nullptr), .hIcon = (HICON)LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON, 0, 0, LR_SHARED), .lpszClassName = L"ditado.opcoes", .hIconSm = (HICON)LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON, 16, 16, 0)};
     RegisterClassExW(&wc);
     once = true;
   }

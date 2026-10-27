@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.28)
-project(ditado VERSION 0.2.0 LANGUAGES CXX)
+project(ditado VERSION 0.2.0 LANGUAGES CXX RC)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 configure_file(src/version.h.in ${CMAKE_BINARY_DIR}/gen/version.h @ONLY)
@@ -14,6 +14,7 @@ add_executable(ditado WIN32
   src/audio.cpp
   src/gate.cpp
   src/inject.cpp
+  src/app.rc
 )
 target_include_directories(ditado PRIVATE src ${CMAKE_BINARY_DIR}/gen third_party)
 target_link_libraries(ditado PRIVATE
