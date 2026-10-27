@@ -1,0 +1,3 @@
+#pragma once
+#define DITADO_VERSION "@PROJECT_VERSION@"
+#define DITADO_APP "@PROJECT_NAME@"
