@@ -91,8 +91,8 @@ Cada campo da UI escreve exatamente a chave que a rota/`items[].input` aceita. Z
 | **P2** | POST /v1/transcricao (WinInet) + `semFala` + erros no balão | ✅ 27/10 — `gate.cpp`; --ditar transcreveu o WAV do gate ✓ |
 | **P3** | SendInput UNICODE no campo ativo | ✅ 27/10 — `inject.cpp`; E2E: fala do gate → texto digitado sozinho ✓ |
 | **P4** | opções com os campos do gate | ✅ 27/10 — diálogo em memória; url/modelo/tecla/autostart vivos |
-| **P5** | `pending/*.wav`, `--version`/`--help`, ícone por estado | ⏳ restante (logs ✓ autostart ✓) |
-| **P6** | Inno Setup + release v0.1.0 no GitHub | ⏳ |
+| **P5** | `pending/*.wav`, `--version`, ícone por estado | ✅ 27/10 — reenvio na subida ✓ granular ✓ (ícone próprio: depois) |
+| **P6** | Inno 7 per-user (sem UAC) + release v0.1.0 no GitHub | ✅ 27/10 — instalado e testado nesta máquina ✓ |
 
 **Medido no E2E (27/10):** `--ditar fala.wav` → gate devolve o texto do TTS → app digita no campo ativo ✓✓✓.
 

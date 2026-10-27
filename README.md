@@ -24,6 +24,7 @@ Os campos do motor têm o mesmo nome da API do gate (`idioma`, `modelo`, `prompt
 | Fase | Entrega |
 |---|---|
 | P0–P4 ✅ | app completo: tray + opções + hotkey + WASAPI→gate→digitação — **E2E: o gate fala, o app digita sozinho** |
-| P5–P6 ⏳ | `pending/*.wav`, instalador Inno Setup, release no GitHub |
+| P5 ✅ | `pending/*.wav` com reenvio na subida, `--version`, balões de erro |
+| P6 ✅ | Inno 7 per-user (sem UAC) → `ditado-setup.exe` · repo público + release v0.1.0 |
 
 Ver `docs/PLANO.md`. Ferramenta de teste do contrato: `tools/gate-test` (binário autocontido).
