@@ -143,7 +143,8 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     Config c = g_cfg;
     tray::SetTooltip(L"configurando…");
     settings::Show(nullptr, c);
-    if (c.url != g_cfg.url || c.tecla != g_cfg.tecla || c.modelo != g_cfg.modelo || c.autostart != g_cfg.autostart) {
+    if (c.url != g_cfg.url || c.tecla != g_cfg.tecla || c.modelo != g_cfg.modelo || c.autostart != g_cfg.autostart ||
+        c.dispositivo != g_cfg.dispositivo) {
       bool combo = c.tecla != g_cfg.tecla, start = c.autostart != g_cfg.autostart;
       g_cfg = c;
       g_cfg.Save();
@@ -207,7 +208,10 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
                              audio::Stop();
                              auto pcm = audio::Flush();
                              auto r = gate::Transcrever(g_cfg, audio::ToWav(pcm));
-                             lg::Info(std::string("teste mic: ") + (r.ok ? "ok" : "erro: " + r.erro));
+                             if (r.ok)
+                                  lg::Info("teste mic: ouvi '" + U(r.texto) + "'" + (r.semFala ? " (SILÊNCIO — veja o dispositivo em Opções)" : ""));
+                                else
+                                  lg::Error("teste mic: erro " + r.erro);
                              if (r.ok && !r.texto.empty()) inject::Texto(g_cfg, r.texto);
                              tray::SetTooltip(L"pronto");
                            }).detach();

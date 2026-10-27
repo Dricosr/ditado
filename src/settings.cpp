@@ -1,107 +1,171 @@
 ﻿#include "settings.h"
-#include <windows.h>
-#include <format>
-#include <vector>
 #include "log.h"
+#include <windows.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys.h>
+#include <propsys.h>
+#include <string>
+#include <format>
 
 namespace {
-// Diálogo de opções construído na mão, em memória — zero .rc, zero frameworks de UI.
-// Sem DS_SETFONT: fontes dos controles ficam com o padrão do sistema (GUI font do SO).
-// DLGTEMPLATE: style, exstyle, cdItems, x, y, cx, cy, menu, classe, título; itens idem.
+// Janela de opções feita com CreateWindowExW + controles filhos (sem DLGTEMPLATE — formato que
+// já provou funcionar neste app: tray.cpp usa CreateWindowExW e funciona ✓).
 
-std::string A2U(const wchar_t* w) {
-  int n = WideCharToMultiByte(CP_UTF8, 0, w, (int)lstrlenW(w), nullptr, 0, nullptr, nullptr);
-  std::string s(n, 0);
-  if (n) WideCharToMultiByte(CP_UTF8, 0, w, (int)lstrlenW(w), s.data(), n, nullptr, nullptr);
-  return s;
-}
 std::wstring U2W(const std::string& s) {
+  if (s.empty()) return {};
   int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
   std::wstring w(n, 0);
-  if (n) MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
+  MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
   return w;
 }
-void PushStr(std::vector<WORD>& v, const wchar_t* s) { while (*s) v.push_back(*s++); v.push_back(0); }
-
-struct Builder {
-  std::vector<WORD> w;
-  void Pad() { if (w.size() % 2) w.push_back(0); }  // DLGITEMTEMPLATE exige fronteira DWORD
-  void Header(WORD nItems, DWORD style, const wchar_t* title) {
-    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), 0, 0, nItems, 6, 4, 248, 156});  // 9 WORDs
-    w.push_back(0);        // menu: nenhum
-    w.push_back(0x0000);   // classe: a predefinida de diálogo (1 WORD — átomo 0x80 deu erro 1407)
-    PushStr(w, title);     // título
-    Pad();                 // alinha o primeiro item
-  }
-  void Item(DWORD style, WORD id, WORD cls, const wchar_t* title, int x, int y, int cx, int cy) {
-    w.insert(w.end(), {(WORD)style, (WORD)(style >> 16), 0, 0, (WORD)x, (WORD)y, (WORD)cx, (WORD)cy, id});  // 9 WORDs
-    w.push_back(0xFFFF); w.push_back(cls);  // classe do controle (0x80 button, 0x81 edit, 0x82 static, 0x84 combo)
-    if (title && *title) PushStr(w, title);
-    else { w.push_back(0xFFFF); w.push_back(0x00A0); }  // sem rótulo: átomo "static"
-    Pad();  // item seguinte também em fronteira DWORD
-  }
-};
-
-INT_PTR CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
-  switch (m) {
-    case WM_INITDIALOG: {
-      SetWindowLongPtrW(h, GWLP_USERDATA, (LONG_PTR)l);
-      auto* c = (Config*)l;
-      HFONT f = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-      EnumChildWindows(h, [](HWND ch, LPARAM f) -> BOOL { SendMessageW(ch, WM_SETFONT, (WPARAM)f, TRUE); return TRUE; },
-                       (LPARAM)f);
-      SetDlgItemTextW(h, 101, c->url.c_str());
-      SetDlgItemTextW(h, 102, U2W(c->tecla).c_str());
-      for (auto* m2 : {"small", "turbo", "large-v3"})
-        SendDlgItemMessageW(h, 103, CB_ADDSTRING, 0, (LPARAM)U2W(m2).c_str());
-      SendDlgItemMessageW(h, 103, CB_SELECTSTRING, (WPARAM)(INT)-1, (LPARAM)U2W(c->modelo).c_str());
-      SendDlgItemMessageW(h, 104, BM_SETCHECK, c->autostart ? BST_CHECKED : BST_UNCHECKED, 0);
-      return TRUE;
-    }
-    case WM_COMMAND:
-      if (LOWORD(w) == IDOK && HIWORD(w) == BN_CLICKED) {
-        auto* c = (Config*)GetWindowLongPtrW(h, GWLP_USERDATA);
-        wchar_t b[512];
-        GetDlgItemTextW(h, 101, b, 500); c->url = b;
-        GetDlgItemTextW(h, 102, b, 500); c->tecla = A2U(b);
-        SendMessageW(GetDlgItem(h, 103), CB_GETLBTEXT,
-                     (WPARAM)(INT)SendMessageW(GetDlgItem(h, 103), CB_GETCURSEL, 0, 0), (LPARAM)b);
-        c->modelo = A2U(b);
-        c->autostart = SendDlgItemMessageW(h, 104, BM_GETCHECK, 0, 0) == BST_CHECKED;
-        EndDialog(h, IDOK);
-        return TRUE;
-      }
-      if (LOWORD(w) == IDCANCEL) { EndDialog(h, IDCANCEL); return TRUE; }
-      return FALSE;
-  }
-  return FALSE;
+std::string W2U(const std::wstring& w) {
+  if (w.empty()) return {};
+  int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+  std::string s(n, 0);
+  if (n) WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
+  return s;
+}
+std::wstring Txt(HWND h) {
+  wchar_t b[512];
+  GetWindowTextW(h, b, 500);
+  return b;
 }
 
-HINSTANCE Own() {
-  wchar_t b[MAX_PATH];
-  GetModuleFileNameW(nullptr, b, MAX_PATH);
-  return (HINSTANCE)GetModuleHandleW(b);
+LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
+  static Config* cfg = nullptr;
+  static HWND e101, e102, e103, c104, c105;
+  static HFONT fnt = nullptr;
+  switch (m) {
+    case WM_CREATE: {
+      cfg = (Config*)((CREATESTRUCTW*)l)->lpCreateParams;
+      HFONT f = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+      fnt = f;
+      auto Lbl = [&](const wchar_t* t, int x, int y) {
+        HWND e = CreateWindowExW(0, L"STATIC", t, WS_CHILD | WS_VISIBLE, x, y, 260, 16, h, nullptr, nullptr, nullptr);
+        SendMessageW(e, WM_SETFONT, (WPARAM)f, TRUE);
+        return e;
+      };
+      auto Edit = [&](int id, int x, int y, int cx) {
+        HWND e = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | WS_BORDER,
+                                 x, y, cx, 22, h, (HMENU)(INT_PTR)id, nullptr, nullptr);
+        SendMessageW(e, WM_SETFONT, (WPARAM)f, TRUE);
+        return e;
+      };
+      Lbl(L"Endereço do gate", 12, 14);
+      e101 = Edit(101, 12, 32, 300);
+      Lbl(L"Tecla (ex.: ctrl+shift+space)", 12, 64);
+      e102 = Edit(102, 12, 82, 300);
+      Lbl(L"Modelo", 330, 14);
+      e103 = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL,
+                             330, 32, 130, 160, h, (HMENU)103, nullptr, nullptr);
+      SendMessageW(e103, WM_SETFONT, (WPARAM)f, TRUE);
+      c104 = CreateWindowExW(0, L"BUTTON", L"Iniciar com o Windows", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                             12, 112, 180, 22, h, (HMENU)104, nullptr, nullptr);
+      SendMessageW(c104, WM_SETFONT, (WPARAM)f, TRUE);
+      Lbl(L"Dispositivo de captura", 330, 64);
+      c105 = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL,
+                             330, 82, 170, 200, h, (HMENU)105, nullptr, nullptr);
+      SendMessageW(c105, WM_SETFONT, (WPARAM)f, TRUE);
+      // preenche lista: todas as capturas ativas (nome amigável → id); seleciona a atual
+      {
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        IMMDeviceEnumerator* en = nullptr; IMMDeviceCollection* coll = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&en)) &&
+            SUCCEEDED(en->EnumAudioEndpoints(eCapture, 1 /*DEVICE_ACTIVE*/, &coll))) {
+          std::wstring def; IMMDevice* dd = nullptr;
+          if (SUCCEEDED(en->GetDefaultAudioEndpoint(eCapture, eConsole, &dd)) && dd) {
+            wchar_t* di = nullptr; dd->GetId(&di); def = di; CoTaskMemFree(di); dd->Release();
+          }
+          UINT n = 0; coll->GetCount(&n);
+          for (UINT i = 0; i < n; i++) {
+            IMMDevice* d = nullptr;
+            if (FAILED(coll->Item(i, &d))) continue;
+            wchar_t* id = nullptr; d->GetId(&id);
+            IPropertyStore* ps = nullptr; wchar_t nm[128] = L"(sem nome)";
+            if (SUCCEEDED(d->Activate(__uuidof(IPropertyStore), CLSCTX_ALL, nullptr, (void**)&ps))) {
+              PROPVARIANT pv; PropVariantInit(&pv);
+              if (SUCCEEDED(ps->GetValue(PKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) wcscpy_s(nm, pv.pwszVal);
+              PropVariantClear(&pv); ps->Release();
+            }
+            int idx = (int)SendMessageW(c105, CB_ADDSTRING, 0, (LPARAM)nm);
+            SendMessageW(c105, CB_SETITEMDATA, idx, (LPARAM)_wcsdup(id));  // cópia nossa: o id original é liberado abaixo
+            std::wstring sel = cfg->dispositivo.empty() ? def : U2W(cfg->dispositivo);
+            if (!sel.empty() && sel == std::wstring(id)) SendMessageW(c105, CB_SETCURSEL, idx, 0);
+            CoTaskMemFree(id); d->Release();
+          }
+        }
+      }
+      for (auto* m2 : {"small", "turbo", "large-v3"})
+        SendMessageW(e103, CB_ADDSTRING, 0, (LPARAM)U2W(m2).c_str());
+      SetWindowTextW(e101, cfg->url.c_str());
+      SetWindowTextW(e102, U2W(cfg->tecla).c_str());
+      SendMessageW(e103, CB_SELECTSTRING, -1, (LPARAM)U2W(cfg->modelo).c_str());
+      SendMessageW(c104, BM_SETCHECK, cfg->autostart ? BST_CHECKED : BST_UNCHECKED, 0);
+      auto Btn = [&](const wchar_t* t, int id, int x) {
+        HWND e = CreateWindowExW(0, L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | (id == IDOK ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON),
+                                 x, 150, 76, 24, h, (HMENU)(INT_PTR)id, nullptr, nullptr);
+        SendMessageW(e, WM_SETFONT, (WPARAM)f, TRUE);
+        return e;
+      };
+      Btn(L"OK", IDOK, 330);
+      Btn(L"Cancelar", IDCANCEL, 414);
+      return 0;
+    }
+    case WM_COMMAND:
+      if (HIWORD(w) == BN_CLICKED) {
+        if (LOWORD(w) == IDOK) {
+          cfg->url = Txt(e101);
+          cfg->tecla = W2U(Txt(e102));
+          wchar_t b[64];
+          SendMessageW(e103, CB_GETLBTEXT, SendMessageW(e103, CB_GETCURSEL, 0, 0), (LPARAM)b);
+          cfg->modelo = W2U(b);
+          cfg->autostart = SendMessageW(c104, BM_GETCHECK, 0, 0) == BST_CHECKED;
+          {
+            int sel = (int)SendMessageW(c105, CB_GETCURSEL, 0, 0);
+            wchar_t* id = (wchar_t*)SendMessageW(c105, CB_GETITEMDATA, sel, 0);
+            cfg->dispositivo = id ? W2U(id) : std::string();
+          }
+          DestroyWindow(h);  // fecha; quem chamou lê o cfg salvo em Show
+          return 0;
+        }
+        if (LOWORD(w) == IDCANCEL) { DestroyWindow(h); return 0; }
+      }
+      return 0;
+    case WM_CLOSE:
+      DestroyWindow(h);
+      return 0;
+    case WM_DESTROY:
+      PostQuitMessage(0);
+      return 0;
+  }
+  return DefWindowProcW(h, m, w, l);
 }
 }  // namespace
 
 namespace settings {
 void Show(HWND owner, Config& cfg) {
-  Builder b;
-  b.Header(9, DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_CENTER, L"ditado — opções");
-  const DWORD E = WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | WS_BORDER;
-  const DWORD L = WS_CHILD | WS_VISIBLE | SS_LEFT;
-  b.Item(L, 0, 0x0082, L"Endereço do gate", 8, 8, 90, 8);
-  b.Item(E, 101, 0x0081, L"", 8, 18, 230, 12);
-  b.Item(L, 0, 0x0082, L"Tecla (ex.: ctrl+shift+space)", 8, 36, 140, 8);
-  b.Item(E, 102, 0x0081, L"", 8, 46, 230, 12);
-  b.Item(L, 0, 0x0082, L"Modelo", 8, 64, 40, 8);
-  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 103, 0x0084, L"", 8, 74, 100, 60);
-  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 104, 0x0080, L"Iniciar com o Windows", 120, 66, 110, 10);
-  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK, 0x0080, L"OK", 8, 138, 50, 14);
-  b.Item(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL, 0x0080, L"Cancelar", 64, 138, 50, 14);
-
-  Config copy = cfg;
-  INT_PTR r = DialogBoxIndirectParamW(Own(), (DLGTEMPLATE*)b.w.data(), owner, Proc, (LPARAM)&copy);
-  if (r == IDOK) cfg = copy;
+  static bool once = false;
+  if (!once) {
+    WNDCLASSEXW wc{.cbSize = sizeof(wc), .lpfnWndProc = Wnd, .hInstance = GetModuleHandleW(nullptr), .lpszClassName = L"ditado.opcoes"};
+    RegisterClassExW(&wc);
+    once = true;
+  }
+  HWND h = CreateWindowExW(WS_EX_DLGMODALFRAME, L"ditado.opcoes", L"ditado — opções",
+                           WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+                           CW_USEDEFAULT, CW_USEDEFAULT, 520, 240, owner, nullptr, GetModuleHandleW(nullptr), &cfg);
+  if (!h) {
+    lg::Error("janela de opções falhou: " + std::to_string((int)GetLastError()));
+    return;
+  }
+  ShowWindow(h, SW_SHOW);
+  UpdateWindow(h);
+  MSG m;
+  while (GetMessageW(&m, nullptr, 0, 0)) {
+    if (!IsDialogMessageW(h, &m)) {
+      TranslateMessage(&m);
+      DispatchMessageW(&m);
+    }
+  }
+  // OK já escreveu em cfg (ponteiro via lpCreateParams); Cancelar não.
 }
 }  // namespace settings
