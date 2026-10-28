@@ -8,6 +8,7 @@ struct Actions {
   std::function<void()> OpenSettings;
   std::function<void()> TestarMic;
   std::function<void()> ToggleAutostart;
+  std::function<void()> Historico;
   std::function<void()> Quit;
 };
 bool Init(HINSTANCE hi, const Actions& actions);

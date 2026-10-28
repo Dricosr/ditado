@@ -1,2 +1,8 @@
 ﻿#define IDI_DITADO 101
+#define IDR_POPIN  201
+#define IDR_POPOUT 202
+#define IDR_RUNNING 203
 IDI_DITADO ICON "icon.ico"
+IDR_POPIN  WAVE "assets/popin.wav"
+IDR_POPOUT WAVE "assets/popout.wav"
+IDR_RUNNING WAVE "assets/running.wav"

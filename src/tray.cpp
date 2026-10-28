@@ -1,9 +1,11 @@
 ﻿#include "tray.h"
 #include "log.h"
 #include <shellapi.h>
+#include <mutex>
 
 namespace {
 const UINT WM_TRAY = WM_APP + 1;
+std::mutex g_tray_mu;
 NOTIFYICONDATAW g_n{};
 tray::Actions g_a;
 
@@ -26,17 +28,19 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, 1, L"Opções…");
     AppendMenuW(menu, MF_STRING, 2, L"Testar microfone");
+    AppendMenuW(menu, MF_STRING, 3, L"Histórico do dia…");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 3, L"Iniciar com o Windows");
-    AppendMenuW(menu, MF_STRING, 4, L"Sair");
+    AppendMenuW(menu, MF_STRING, 4, L"Iniciar com o Windows");
+    AppendMenuW(menu, MF_STRING, 5, L"Sair");
     SetForegroundWindow(h);
     UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, p.x, p.y, 0, h, nullptr);
     DestroyMenu(menu);
     switch (id) {
       case 1: if (g_a.OpenSettings) g_a.OpenSettings(); break;
       case 2: if (g_a.TestarMic) g_a.TestarMic(); break;
-      case 3: if (g_a.ToggleAutostart) g_a.ToggleAutostart(); break;
-      case 4: if (g_a.Quit) g_a.Quit(); break;
+      case 3: if (g_a.Historico) g_a.Historico(); break;
+      case 4: if (g_a.ToggleAutostart) g_a.ToggleAutostart(); break;
+      case 5: if (g_a.Quit) g_a.Quit(); break;
     }
     return 0;
   }
@@ -77,12 +81,14 @@ bool Init(HINSTANCE hi, const Actions& actions) {
 }
 
 void SetTooltip(const std::wstring& t) {
+  std::lock_guard lk(g_tray_mu);
   lstrcpynW(g_n.szTip, (L"ditado — " + t).c_str(), 128);
   g_n.uFlags = NIF_TIP;
   Shell_NotifyIconW(NIM_MODIFY, &g_n);
 }
 
 void Balloon(const std::wstring& title, const std::wstring& msg) {
+  std::lock_guard lk(g_tray_mu);
   lstrcpynW(g_n.szInfoTitle, title.c_str(), 64);
   lstrcpynW(g_n.szInfo, msg.c_str(), 128);
   g_n.uFlags = NIF_INFO;

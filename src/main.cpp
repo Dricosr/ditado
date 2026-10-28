@@ -1,39 +1,59 @@
 ﻿#include <windows.h>
 #include <shellapi.h>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <format>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "audio.h"
 #include "config.h"
 #include "gate.h"
+#include "history.h"
 #include "hotkey.h"
 #include "inject.h"
 #include "log.h"
 #include "settings.h"
+#include "som.h"
 #include "tray.h"
 #include "version.h"
 
 namespace {
 Config g_cfg;
-std::wstring ExeDir() {
-  wchar_t b[MAX_PATH];
-  GetModuleFileNameW(nullptr, b, MAX_PATH);
-  return std::wstring(b).substr(0, std::wstring(b).find_last_of(L'\\'));
-}
-// conversão dois sentidos: U é a canônica (wide→utf8); W é o inverso
+
+// Fila de gravações: cada soltura vira um job; um único worker envia na ordem em que
+// o usuário falou. Assim os textos são digitados na mesma ordem, mesmo que o gate demore.
+struct Job {
+  uint64_t seq;
+  std::vector<int16_t> pcm;
+  Config cfg;  // cópia: mudar opções não afeta um job já criado
+};
+std::mutex g_q_mu;
+std::condition_variable g_q_cv;
+std::deque<Job> g_q;
+std::atomic<int> g_pending{0};
+std::atomic<bool> g_rec{false};
+std::atomic<bool> g_quit{false};
+std::atomic<uint64_t> g_seq{0};  // ordem das gravações
+
 std::string U(const std::wstring& w) {
+  if (w.empty()) return {};
   int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
   std::string s(n, 0);
   if (n) WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
   return s;
 }
 std::wstring W(const std::string& s) {
+  if (s.empty()) return {};
   int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
   std::wstring w(n, 0);
   if (n) MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
   return w;
 }
+
 void SetAutostart(bool on) {
   HKEY k;
   if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_WRITE, &k)) return;
@@ -46,6 +66,65 @@ void SetAutostart(bool on) {
     RegDeleteValueW(k, L"ditado");
   }
   RegCloseKey(k);
+}
+
+void SavePending(uint64_t seq, const std::string& wav) {
+  SYSTEMTIME t;
+  GetLocalTime(&t);
+  std::wstring nome = std::format(L"{:04}{:02}{:02}-{:02}{:02}{:02}-{}.wav",
+                                  t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, seq);
+  std::wstring dir = Config::Dir() + L"\\pending";
+  CreateDirectoryW(dir.c_str(), nullptr);
+  std::wstring p = dir + L"\\" + nome;
+  HANDLE f = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+  if (f == INVALID_HANDLE_VALUE) { lg::Error("pending: não consegui criar " + U(nome)); return; }
+  DWORD wr = 0;
+  WriteFile(f, wav.data(), (DWORD)wav.size(), &wr, nullptr);
+  CloseHandle(f);
+  lg::Info("áudio guardado em pending: " + U(nome));
+}
+
+void UpdateTip() {
+  if (g_rec.load()) {
+    tray::SetTooltip(L"gravando… (solte para transcrever)");
+  } else {
+    int n = g_pending.load();
+    tray::SetTooltip(n > 0 ? L"transcrevendo… " + std::to_wstring(n) + L" na fila" : L"pronto");
+  }
+}
+
+void JobWorker() {
+  while (true) {
+    Job job;
+    {
+      std::unique_lock lk(g_q_mu);
+      g_q_cv.wait(lk, [] { return g_quit.load() || !g_q.empty(); });
+      if (g_quit.load()) break;
+      job = std::move(g_q.front());
+      g_q.pop_front();
+    }
+    std::string wav = audio::ToWav(job.pcm);
+    lg::Audio(wav);
+    try {
+      auto r = gate::Transcrever(job.cfg, wav);
+      if (r.ok && !r.semFala) {
+        inject::Texto(job.cfg, r.texto);
+        history::Add(r.texto, r.jobId, job.cfg.modelo, (double)job.pcm.size() / 16000.0);
+        lg::Info("job seq=" + std::to_string(job.seq) + " transcrito ok jobId=" + r.jobId);
+      } else if (r.ok) {
+        lg::Info("job seq=" + std::to_string(job.seq) + " sem fala — nada digitado");
+      } else {
+        lg::Error("gate: " + r.erro + " " + r.detail + " jobId=" + r.jobId + " seq=" + std::to_string(job.seq));
+        tray::Balloon(L"ditado", W(r.erro + " " + r.detail));
+        SavePending(job.seq, wav);
+      }
+    } catch (const std::exception& e) {
+      lg::Error("job seq=" + std::to_string(job.seq) + " falhou: " + e.what());
+    }
+    int left = --g_pending;
+    UpdateTip();
+    if (left == 0) som::Running(false);
+  }
 }
 }  // namespace
 
@@ -68,52 +147,49 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   bool selftest = wcsstr(cmd, L"--selftest") != nullptr;
   lg::Info(std::format("ditado {} iniciado — gate={}", DITADO_VERSION, U(g_cfg.url)));
 
-  // ---- máquina de estados: Ocioso → Gravando → Transcrevendo → Ocioso ----
+  std::thread(JobWorker).detach();  // um único worker preserva a ordem das gravações
+
+  // ---- máquina de estados: Ocioso → Gravando → (fila) Transcrevendo → Ocioso ----
   enum class Estado { Ocioso, Gravando } est = Estado::Ocioso;
   auto on_key = [&](const KeyEvent& e) {
     if (e.down && est == Estado::Ocioso) {
       est = Estado::Gravando;
+      g_rec = true;
       tray::SetTooltip(L"gravando… (solte para transcrever)");
       if (!audio::Start(W(g_cfg.dispositivo))) {
         est = Estado::Ocioso;
+        g_rec = false;
         lg::Error("não consegui iniciar a captura — veja o dispositivo em Opções");
         tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
-        tray::SetTooltip(L"pronto");
+        UpdateTip();
+        return;
       }
+      som::PopIn();  // captura já está ligada; o pop é o feedback de "gravando"
     } else if (!e.down && est == Estado::Gravando) {
       est = Estado::Ocioso;
+      g_rec = false;
       audio::Stop();
       auto pcm = audio::Flush();
       if (lg::Verbose())
         lg::Info("entrada: tecla '" + g_cfg.tecla + "' solta — gravado " + std::to_string(pcm.size()) + " amostras de '" + g_cfg.dispositivo + "'");
-      tray::SetTooltip(L"transcrevendo…");
-      std::thread([pcm = std::move(pcm)] {
-        std::string wav = audio::ToWav(pcm);
-        lg::Audio(wav);  // salva em <dir>\audio\ quando o log local está ligado
-        auto r = gate::Transcrever(g_cfg, wav);
-        if (r.ok && !r.semFala)
-          inject::Texto(g_cfg, r.texto);
-        else if (r.ok)
-            lg::Info("sem fala — nada enviado");
-        else {
-            lg::Error("gate: " + r.erro + " " + r.detail + " jobId=" + r.jobId);
-            tray::Balloon(L"ditado", W(r.erro + " " + r.detail));
-            // a frase nunca se perde: WAV guardado e reenviado quando o gate voltar
-            SYSTEMTIME t;
-            GetLocalTime(&t);
-            wchar_t name[64];
-            wsprintfW(name, L"\\%04u%02u%02u-%02u%02u%02u.wav", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
-            std::wstring dir = Config::Dir() + L"\\pending";
-            CreateDirectoryW(dir.c_str(), nullptr);
-            std::wstring p = dir + name;
-            if (INVALID_FILE_ATTRIBUTES == GetFileAttributesW(p.c_str())) {
-              HANDLE f = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
-              DWORD wr = 0;
-              WriteFile(f, wav.data(), (DWORD)wav.size(), &wr, nullptr);
-              CloseHandle(f);
-              lg::Info("áudio guardado em pending: " + U(std::wstring(name)));
-            }
-        }
+      som::PopOut();
+      if (pcm.empty()) {
+        lg::Info("gravação vazia — nada a enviar");
+        UpdateTip();
+        return;
+      }
+      Job job{++g_seq, std::move(pcm), g_cfg};
+      ++g_pending;
+      {
+        std::lock_guard lk(g_q_mu);
+        g_q.push_back(std::move(job));
+      }
+      g_q_cv.notify_one();
+      UpdateTip();
+      // o pop final já está tocando; depois dele, entra o loop de "processando"
+      std::thread([] {
+        Sleep(2000);
+        if (!g_rec.load() && g_pending.load() > 0) som::Running(true);
       }).detach();
     }
   };
@@ -134,7 +210,10 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
           ReadFile(f, wav.data(), (DWORD)wav.size(), &rd, nullptr);
           CloseHandle(f);
           auto r = gate::Transcrever(g_cfg, wav);
-          if (r.ok && !r.semFala) inject::Texto(g_cfg, r.texto);
+          if (r.ok && !r.semFala) {
+            inject::Texto(g_cfg, r.texto);
+            history::Add(r.texto, r.jobId, g_cfg.modelo, 0.0);
+          }
           if (r.ok) {
             lg::Info("pending reenviado: " + U(std::wstring(fd.cFileName)));
             DeleteFileW(p.c_str());  // granular: só o arquivo que a gente mesmo gravou
@@ -148,6 +227,10 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   if (wcsstr(cmd, L"--version") || wcsstr(cmd, L"--help")) {
     lg::Info(std::string("ditado ") + DITADO_VERSION + " — gate: " + U(g_cfg.url));
     if (!selftest) return 0;
+  }
+  if (wcsstr(cmd, L"--historico")) {  // modo de teste: abre a janela do histórico
+    history::Show();
+    return 0;
   }
 
   auto open_settings = [] {
@@ -166,10 +249,10 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
       if (dev) audio::Prepare(W(g_cfg.dispositivo));
       lg::Info("config salva — opções:\n" + g_cfg.Dump());
     }
-    tray::SetTooltip(L"pronto");
+    UpdateTip();
   };
 
-  // ---- modos de teste (--selftest já existia; --falar/--ditar fecham o E2E) ----
+  // ---- modos de teste (--selftest já existia; --ditar fecha o E2E) ----
   auto arg = [&](std::wstring& out, const wchar_t* name) {
     int n = 0;
     LPWSTR* a = CommandLineToArgvW(cmd, &n);
@@ -185,7 +268,6 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   }
   if (arg(v, L"--ditar") && GetFileAttributesW(v.c_str()) != INVALID_FILE_ATTRIBUTES) {
     // E2E: WAV do gate-tts → rota de transcrição do app → SendInput no campo ativo.
-    // Percorre a máquina de estados real (Gravando→Transcrevendo→Ocioso) como se a tecla fosse segurada.
     est = Estado::Gravando;
     tray::SetTooltip(L"gravando…");
     audio::Start(W(g_cfg.dispositivo));
@@ -221,16 +303,18 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
                              tray::SetTooltip(L"pronto");
                              return;
                            }
+                           som::PopIn();
                            tray::SetTooltip(L"testando microfone…");
                            std::thread([] {
                              Sleep(3000);
                              audio::Stop();
+                             som::PopOut();
                              auto pcm = audio::Flush();
                              auto r = gate::Transcrever(g_cfg, audio::ToWav(pcm));
                              if (r.ok)
-                                  lg::Info("teste mic: ouvi '" + U(r.texto) + "'" + (r.semFala ? " (SILÊNCIO — veja o dispositivo em Opções)" : ""));
-                                else
-                                  lg::Error("teste mic: erro " + r.erro);
+                               lg::Info("teste mic: ouvi '" + U(r.texto) + "'" + (r.semFala ? " (SILÊNCIO — veja o dispositivo em Opções)" : ""));
+                             else
+                               lg::Error("teste mic: erro " + r.erro);
                              if (r.ok && !r.texto.empty()) inject::Texto(g_cfg, r.texto);
                              tray::SetTooltip(L"pronto");
                            }).detach();
@@ -240,6 +324,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
                            g_cfg.Save();
                            SetAutostart(g_cfg.autostart);
                          },
+                         .Historico = [] { history::Show(); },
                          .Quit = [] { PostMessageW(FindWindowW(L"ditado.wnd", nullptr), WM_CLOSE, 0, 0); },
                      })) {
     tray::SetTooltip(L"pronto");
@@ -251,5 +336,8 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     DispatchMessageW(&m);
   }
   hotkey::Stop();
+  g_quit = true;
+  g_q_cv.notify_all();
+  som::StopAll();
   return (int)m.wParam;
 }

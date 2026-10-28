@@ -67,4 +67,23 @@ void Texto(const Config& cfg, const std::wstring& t) {
     SendInput(1, &i, sizeof i);
   }
 }
+
+bool Copiar(const std::wstring& t) {
+  if (t.empty() || !OpenClipboard(nullptr)) return false;
+  EmptyClipboard();
+  const size_t bytes = (t.size() + 1) * sizeof(wchar_t);
+  HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+  bool ok = false;
+  if (h) {
+    void* p = GlobalLock(h);
+    if (p) {
+      CopyMemory(p, t.c_str(), bytes);
+      GlobalUnlock(h);
+      ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;  // o clipboard toma posse do HGLOBAL
+    }
+    if (!ok) GlobalFree(h);
+  }
+  CloseClipboard();
+  return ok;
+}
 }  // namespace inject

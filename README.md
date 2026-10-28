@@ -2,14 +2,17 @@
 
 Ditado por voz para qualquer campo de texto no Windows: **segure a combinação de teclas → fale → solte → o texto é digitado no campo ativo**.
 
-- **Sem framework**: C++20/Win32 puro (hook de teclado, tray, WASAPI, WinInet) — um `.exe` de ~400 KB, sem DLLs de runtime.
+- **Sem framework**: C++20/Win32 puro (hook de teclado, tray, WASAPI, WinInet) — um `.exe` autocontido, sem DLLs de runtime.
 - **Transcrição no `gate`** (nanosaurus `transcricao`): o app só grava, sobe o WAV e digita a resposta.
+- **Feedback auditivo**: pop ao começar/terminar a gravação e um loop discreto enquanto transcreve.
+- **Vários ditados em sequência**: as gravações são enfileiradas e os textos entram na ordem em que foram falados.
 
 ## Uso
 
 1. Instale o `ditado-setup.exe` (instala por usuário, sem UAC) e rode.
 2. O ícone aparece na bandeja (canto inferior direito). Clique nele para abrir as opções.
-3. Segure `ctrl+shift+space` (configurável), fale, solte.
+3. Segure `ctrl+shift+space` (configurável), fale, solte. O pop de início/fim e o loop de processamento dão o feedback auditivo.
+4. No menu da bandeja, **Histórico do dia…** lista os textos transcritos hoje; selecione um e clique em **Copiar** (ou dê duplo clique) para mandá-lo ao clipboard.
 
 ## Config (`%APPDATA%\ditado\config.json`)
 
@@ -23,8 +26,9 @@ Ligue `Log local (dev)` em **Opções**. Ele grava todas as opções, o áudio g
 
 - `%APPDATA%\ditado\logs\app-AAAAMMDD.log` — opções (JSON), eventos, request e resposta do gate, incluindo o `cliente` (User-Agent) enviado.
 - `%APPDATA%\ditado\audio\AAAAMMDD-HHMMSS.wav` — o WAV 16 kHz mono que foi enviado ao gate (mantém os 30 mais novos).
+- `%APPDATA%\ditado\history\AAAAMMDD.jsonl` — histórico do dia (hora, texto, jobId, modelo, duração), sempre gravado; não depende do log de desenvolvimento.
 
-Desligado, nada disso é gravado; o `config.json` e a pasta `pending/` continuam funcionando.
+Desligado, o log e os WAV de log não são gravados; o `config.json`, a pasta `pending/` e o histórico diário continuam funcionando.
 
 ## Build
 
@@ -38,5 +42,6 @@ Desligado, nada disso é gravado; o `config.json` e a pasta `pending/` continuam
 | P5 ✅ | `pending/*.wav` com reenvio na subida, `--version`, balões de erro |
 | P6 ✅ | Inno 7 per-user (sem UAC) → `ditado-setup.exe` · repo público + release v0.1.0 |
 | 0.2.2 ✅ | áudio gravado completo (o tamanho do pacote era tratado como bytes); nomes reais dos dispositivos; ícone próprio; log local com todas as opções; cliente (`User-Agent`) explícito no gate |
+| 0.3.0 ✅ | pop in/out, loop de processamento, fila de vários ditados com textos na ordem e histórico do dia na bandeja (copiar para o clipboard) |
 
 Ver `docs/PLANO.md`. Ferramenta de teste do contrato: `tools/gate-test` (binário autocontido).
