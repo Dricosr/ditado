@@ -37,6 +37,6 @@ Desligado, nada disso é gravado; o `config.json` e a pasta `pending/` continuam
 | P0–P4 ✅ | app completo: tray + opções + hotkey + WASAPI→gate→digitação — **E2E: o gate fala, o app digita sozinho** |
 | P5 ✅ | `pending/*.wav` com reenvio na subida, `--version`, balões de erro |
 | P6 ✅ | Inno 7 per-user (sem UAC) → `ditado-setup.exe` · repo público + release v0.1.0 |
-| 0.2.2 ✅ | áudio gravado completo (o tamanho do pacote era tratado como bytes); nomes reais dos dispositivos; ícone próprio; log local com todas as opções |
+| 0.2.2 ✅ | áudio gravado completo (o tamanho do pacote era tratado como bytes); nomes reais dos dispositivos; ícone próprio; log local com todas as opções; cliente (`User-Agent`) explícito no gate |
 
 Ver `docs/PLANO.md`. Ferramenta de teste do contrato: `tools/gate-test` (binário autocontido).
