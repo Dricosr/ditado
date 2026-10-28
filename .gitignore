@@ -1,3 +1,12 @@
 ﻿/build/
 /te/
 *.obj
+*.sbr
+
+# artefatos de build dos projetos C# de teste
+/tools/e2e-test/bin/
+/tools/e2e-test/obj/
+/tools/gate-test/bin/Release/
+/tools/gate-test/bin/Debug/
+/tools/gate-test/obj/
+/tools/gate-test/publish/
