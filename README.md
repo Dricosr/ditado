@@ -126,7 +126,7 @@ X-Gate-App: ditado
 User-Agent: Ditado/<versão> (Windows 11)
 ```
 
-Corpo = **WAV cru** (16 kHz mono s16). O gate devolve:
+Corpo = **WAV cru** (16 kHz mono s16). O app `ditado` é **aberto** no gate: só `X-Gate-App: ditado` identifica, sem token. O gate devolve:
 
 ```json
 {
