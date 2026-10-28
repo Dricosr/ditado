@@ -36,6 +36,8 @@ std::condition_variable g_q_cv;
 std::deque<Job> g_q;
 std::atomic<int> g_pending{0};
 std::atomic<bool> g_rec{false};
+std::mutex g_rec_mu;
+std::condition_variable g_rec_cv;
 std::atomic<bool> g_quit{false};
 std::atomic<uint64_t> g_seq{0};  // ordem das gravações
 
@@ -84,6 +86,11 @@ void SavePending(uint64_t seq, const std::string& wav) {
   lg::Info("áudio guardado em pending: " + U(nome));
 }
 
+void WaitNotRecording() {
+  std::unique_lock lk(g_rec_mu);
+  g_rec_cv.wait(lk, [] { return !g_rec.load() || g_quit.load(); });
+}
+
 void UpdateTip() {
   if (g_rec.load()) {
     tray::SetTooltip(L"gravando… (solte para transcrever)");
@@ -108,6 +115,7 @@ void JobWorker() {
     try {
       auto r = gate::Transcrever(job.cfg, wav);
       if (r.ok && !r.semFala) {
+        WaitNotRecording();  // não digita enquanto o usuário ainda segura a tecla gravando
         inject::Texto(job.cfg, r.texto);
         history::Add(r.texto, r.jobId, job.cfg.modelo, (double)job.pcm.size() / 16000.0);
         lg::Info("job seq=" + std::to_string(job.seq) + " transcrito ok jobId=" + r.jobId);
@@ -159,6 +167,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
       if (!audio::Start(W(g_cfg.dispositivo))) {
         est = Estado::Ocioso;
         g_rec = false;
+        g_rec_cv.notify_all();
         lg::Error("não consegui iniciar a captura — veja o dispositivo em Opções");
         tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
         UpdateTip();
@@ -168,6 +177,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     } else if (!e.down && est == Estado::Gravando) {
       est = Estado::Ocioso;
       g_rec = false;
+      g_rec_cv.notify_all();
       audio::Stop();
       auto pcm = audio::Flush();
       if (lg::Verbose())
