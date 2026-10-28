@@ -48,7 +48,7 @@ void Write(Level lvl, const std::string& msg) {
   std::wstring path;
   {
     std::lock_guard g(g_mu);
-    if (g_base.empty()) return;
+    if (!g_verbose || g_base.empty()) return;  // log desligado na UI = nada é gravado
     path = g_base + L"\\logs\\app-" + Day() + L".log";
   }
   std::ofstream f(path, std::ios::app | std::ios::binary);
