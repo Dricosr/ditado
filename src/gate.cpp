@@ -14,6 +14,12 @@ std::wstring U8(const std::string& s) {
   if (n) MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
   return w;
 }
+std::string W8(const std::wstring& w) {
+  int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+  std::string s(n, 0);
+  if (n) WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
+  return s;
+}
 }  // namespace
 
 namespace gate {
@@ -39,7 +45,7 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
     return r;
   }
   if (lg::Verbose())
-    lg::Info("→ enviado: POST " + std::string(url.begin(), url.end()) + " corpo=" + std::to_string(wav.size()) + " bytes");
+    lg::Info("→ enviado: POST " + W8(url) + " corpo=" + std::to_string(wav.size()) + " bytes");
   HINTERNET c = InternetConnectW(s, u.lpszHostName, u.nPort, nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
   HINTERNET req = c ? HttpOpenRequestW(c, L"POST", u.lpszUrlPath, nullptr, nullptr, nullptr,
                                        INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION, 0)
@@ -72,7 +78,7 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
     InternetCloseHandle(req);
   } else {
     r.erro = "conexao";
-    r.detail = "gate inacessível: " + std::to_string(GetLastError()) + " url=" + std::string(url.begin(), url.end());
+    r.detail = "gate inacessível: " + std::to_string(GetLastError()) + " url=" + W8(url);
   }
   if (c) InternetCloseHandle(c);
   InternetCloseHandle(s);

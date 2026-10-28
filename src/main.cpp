@@ -62,6 +62,8 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
   g_cfg = Config::Load();
   lg::Init(Config::Dir());
   lg::Verbose(g_cfg.log_local);
+  audio::Prepare(W(g_cfg.dispositivo));  // deixa o stream pronto: gravar começa sem atraso
+  lg::Info("opções:\n" + g_cfg.Dump());
   const wchar_t* cmd = GetCommandLineW();
   bool selftest = wcsstr(cmd, L"--selftest") != nullptr;
   lg::Info(std::format("ditado {} iniciado — gate={}", DITADO_VERSION, U(g_cfg.url)));
@@ -72,7 +74,12 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     if (e.down && est == Estado::Ocioso) {
       est = Estado::Gravando;
       tray::SetTooltip(L"gravando… (solte para transcrever)");
-      audio::Start(W(g_cfg.dispositivo));
+      if (!audio::Start(W(g_cfg.dispositivo))) {
+        est = Estado::Ocioso;
+        lg::Error("não consegui iniciar a captura — veja o dispositivo em Opções");
+        tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
+        tray::SetTooltip(L"pronto");
+      }
     } else if (!e.down && est == Estado::Gravando) {
       est = Estado::Ocioso;
       audio::Stop();
@@ -149,13 +156,15 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     settings::Show(nullptr, c);
     if (c.url != g_cfg.url || c.tecla != g_cfg.tecla || c.modelo != g_cfg.modelo || c.autostart != g_cfg.autostart ||
         c.dispositivo != g_cfg.dispositivo || c.log_local != g_cfg.log_local) {
-      bool combo = c.tecla != g_cfg.tecla, start = c.autostart != g_cfg.autostart;
+      bool combo = c.tecla != g_cfg.tecla, start = c.autostart != g_cfg.autostart,
+           dev = c.dispositivo != g_cfg.dispositivo;
       g_cfg = c;
       g_cfg.Save();
       lg::Verbose(g_cfg.log_local);
       if (combo) hotkey::SetCombo(g_cfg.tecla);
       if (start) SetAutostart(g_cfg.autostart);
-      lg::Info("config salva");
+      if (dev) audio::Prepare(W(g_cfg.dispositivo));
+      lg::Info("config salva — opções:\n" + g_cfg.Dump());
     }
     tray::SetTooltip(L"pronto");
   };
@@ -206,8 +215,13 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
                          .OpenSettings = open_settings,
                          .TestarMic = [] {
                            lg::Info("testando microfone…");
+                           if (!audio::Start(W(g_cfg.dispositivo))) {
+                             lg::Error("teste mic: não consegui iniciar a captura");
+                             tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
+                             tray::SetTooltip(L"pronto");
+                             return;
+                           }
                            tray::SetTooltip(L"testando microfone…");
-                           audio::Start(W(g_cfg.dispositivo));
                            std::thread([] {
                              Sleep(3000);
                              audio::Stop();

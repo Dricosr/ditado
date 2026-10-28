@@ -1,5 +1,5 @@
-; instalador do ditado — simples, confiável, sem elevação
-#define MyAppVersion "0.1.0"
+﻿; instalador do ditado — simples, confiável, sem elevação
+#define MyAppVersion "0.2.1"
 
 [Setup]
 AppId={{7A9C4B8E-1B7F-4D3E-9C1A-2F5E8D6C0A4B}
@@ -17,8 +17,9 @@ OutputDir=..\build\installer
 OutputBaseFilename=ditado-setup
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+SetupIconFile=..\src\icon.ico
 
 [Languages]
 Name: "ptbr"; MessagesFile: "compiler:Languages\Portuguese.isl"

@@ -6,8 +6,10 @@
 #include <propsys.h>
 #include <string>
 #include <format>
+#include <vector>
 
 namespace {
+std::vector<std::wstring> g_devIds;  // ids dos dispositivos listados (itemdata = índice)
 // Janela de opções feita com CreateWindowExW + controles filhos (sem DLGTEMPLATE — formato que
 // já provou funcionar neste app: tray.cpp usa CreateWindowExW e funciona ✓).
 
@@ -69,34 +71,56 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
       c105 = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL,
                              330, 82, 170, 200, h, (HMENU)105, nullptr, nullptr);
       SendMessageW(c105, WM_SETFONT, (WPARAM)f, TRUE);
-      // preenche lista: todas as capturas ativas (nome amigável → id); seleciona a atual
+      // preenche lista: capturas ativas com nome amigável (FriendlyName); itemdata = índice em devIds
       {
+        g_devIds.clear();
+        g_devIds.reserve(32);
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         IMMDeviceEnumerator* en = nullptr; IMMDeviceCollection* coll = nullptr;
-        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&en)) &&
-            SUCCEEDED(en->EnumAudioEndpoints(eCapture, 1 /*DEVICE_ACTIVE*/, &coll))) {
-          std::wstring def; IMMDevice* dd = nullptr;
+        std::wstring def; IMMDevice* dd = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                      __uuidof(IMMDeviceEnumerator), (void**)&en))) {
           if (SUCCEEDED(en->GetDefaultAudioEndpoint(eCapture, eConsole, &dd)) && dd) {
-            wchar_t* di = nullptr; dd->GetId(&di); def = di; CoTaskMemFree(di); dd->Release();
+            wchar_t* di = nullptr; dd->GetId(&di); def = di ? di : L""; CoTaskMemFree(di); dd->Release();
           }
-          UINT n = 0; coll->GetCount(&n);
-          for (UINT i = 0; i < n; i++) {
-            IMMDevice* d = nullptr;
-            if (FAILED(coll->Item(i, &d))) continue;
-            wchar_t* id = nullptr; d->GetId(&id);
-            IPropertyStore* ps = nullptr; wchar_t nm[128] = L"(sem nome)";
-            if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
-              PROPVARIANT pv; PropVariantInit(&pv);
-              if (SUCCEEDED(ps->GetValue(PKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) wcscpy_s(nm, pv.pwszVal);
-              PropVariantClear(&pv); ps->Release();
+          if (SUCCEEDED(en->EnumAudioEndpoints(eCapture, 1 /*DEVICE_ACTIVE*/, &coll))) {
+            UINT n = 0; coll->GetCount(&n);
+            for (UINT i = 0; i < n; i++) {
+              IMMDevice* d = nullptr;
+              if (FAILED(coll->Item(i, &d))) continue;
+              wchar_t* id = nullptr; d->GetId(&id);
+              std::wstring nm;
+              IPropertyStore* ps = nullptr;
+              if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
+                PROPVARIANT pv; PropVariantInit(&pv);
+                if (SUCCEEDED(ps->GetValue(PKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) nm = pv.pwszVal;
+                PropVariantClear(&pv);
+                if (nm.empty()) {  // alguns endpoints só têm a descrição
+                  PropVariantInit(&pv);
+                  if (SUCCEEDED(ps->GetValue(PKEY_Device_DeviceDesc, &pv)) && pv.vt == VT_LPWSTR) nm = pv.pwszVal;
+                  PropVariantClear(&pv);
+                }
+                ps->Release();
+              }
+              if (nm.empty()) nm = L"Dispositivo de captura";
+              g_devIds.push_back(std::wstring(id ? id : L""));
+              int idx = (int)SendMessageW(c105, CB_ADDSTRING, 0, (LPARAM)nm.c_str());
+              SendMessageW(c105, CB_SETITEMDATA, idx, (LPARAM)idx);
+              CoTaskMemFree(id); d->Release();
             }
-            int idx = (int)SendMessageW(c105, CB_ADDSTRING, 0, (LPARAM)nm);
-            SendMessageW(c105, CB_SETITEMDATA, idx, (LPARAM)_wcsdup(id));  // cópia nossa: o id original é liberado abaixo
-            std::wstring sel = cfg->dispositivo.empty() ? def : U2W(cfg->dispositivo);
-            if (!sel.empty() && sel == std::wstring(id)) SendMessageW(c105, CB_SETCURSEL, idx, 0);
-            CoTaskMemFree(id); d->Release();
+            coll->Release();
           }
         }
+        int sel = -1;
+        if (!cfg->dispositivo.empty())
+          for (size_t i = 0; i < g_devIds.size(); i++)
+            if (g_devIds[i] == U2W(cfg->dispositivo)) { sel = (int)i; break; }
+        if (sel < 0)
+          for (size_t i = 0; i < g_devIds.size(); i++)
+            if (g_devIds[i] == def) { sel = (int)i; break; }
+        if (sel < 0 && !g_devIds.empty()) sel = 0;
+        if (sel >= 0) SendMessageW(c105, CB_SETCURSEL, sel, 0);
+        if (en) en->Release();
       }
       for (auto* m2 : {"small", "turbo", "large-v3"})
         SendMessageW(e103, CB_ADDSTRING, 0, (LPARAM)U2W(m2).c_str());
@@ -127,8 +151,8 @@ LRESULT CALLBACK Wnd(HWND h, UINT m, WPARAM w, LPARAM l) {
           cfg->log_local = SendMessageW(c106, BM_GETCHECK, 0, 0) == BST_CHECKED;
           {
             int sel = (int)SendMessageW(c105, CB_GETCURSEL, 0, 0);
-            wchar_t* id = (wchar_t*)SendMessageW(c105, CB_GETITEMDATA, sel, 0);
-            cfg->dispositivo = id ? W2U(id) : std::string();
+            INT_PTR it = (INT_PTR)SendMessageW(c105, CB_GETITEMDATA, sel, 0);
+            cfg->dispositivo = (sel >= 0 && it >= 0 && it < (INT_PTR)g_devIds.size()) ? W2U(g_devIds[it]) : std::string();
           }
           DestroyWindow(h);  // fecha; quem chamou lê o cfg salvo em Show
           return 0;

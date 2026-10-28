@@ -71,7 +71,7 @@ Config Config::Load() {
   return c;
 }
 
-void Config::Save() const {
+std::string Config::Dump() const {
   json j;
   j["url"] = U(url); j["idioma"] = idioma; j["modelo"] = modelo; j["prompt"] = prompt;
   j["threshold"] = threshold; j["min_silence_ms"] = min_silence_ms;
@@ -80,8 +80,12 @@ void Config::Save() const {
   j["app"] = app; j["tecla"] = tecla; j["dispositivo"] = dispositivo;
   j["metodo_insercao"] = metodo_insercao; j["mostrar_sem_fala"] = mostrar_sem_fala;
   j["autostart"] = autostart; j["log_local"] = log_local;
+  return j.dump(2);
+}
+
+void Config::Save() const {
   std::wstring p = Dir() + L"\\config.json", tmp = p + L".tmp";
-  { std::ofstream f(tmp, std::ios::binary); f << j.dump(2); }
+  { std::ofstream f(tmp, std::ios::binary); f << Dump(); }
   MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);  // atômica: nunca corta no meio
 }
 

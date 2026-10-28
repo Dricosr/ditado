@@ -12,6 +12,7 @@ struct Config {
   std::string tecla = "ctrl+shift+space", dispositivo, metodo_insercao = "unicode";
   static Config Load();
   void Save() const;
+  std::string Dump() const;     // todas as opções (também vai para o log local)
   std::string ToQuery() const;
   static std::wstring Dir();
 };
