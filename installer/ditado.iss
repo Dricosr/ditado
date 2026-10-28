@@ -1,5 +1,5 @@
 ﻿; instalador do ditado — simples, confiável, sem elevação
-#define MyAppVersion "0.2.1"
+#define MyAppVersion "0.2.2"
 
 [Setup]
 AppId={{7A9C4B8E-1B7F-4D3E-9C1A-2F5E8D6C0A4B}

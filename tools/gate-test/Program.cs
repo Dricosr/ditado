@@ -14,6 +14,7 @@ public class T
     public static async Task Main(string[] a)
     {
         Http.DefaultRequestHeaders.Add("X-Gate-App", "ditado");
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd("Ditado-teste/0.1 (Windows 11)");
         Http.Timeout = TimeSpan.FromSeconds(120);
         var modo = a.Length > 0 ? a[0] : "--ajuda";
         var alvo = a.Length > 1 ? a[1] : "";

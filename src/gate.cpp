@@ -30,7 +30,11 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
     r.detail = "o cliente cortou antes de chamar o gate";
     return r;
   }
-  HINTERNET s = InternetOpenW(L"ditado/" DITADO_VERSION, INTERNET_OPEN_TYPE_DIRECT, nullptr, nullptr, 0);
+  // O "cliente" no gate é o campo `agent`, que o gate tira do header User-Agent.
+  // Mande a identificação explícita (app/versão/SO) — sem ela o painel mostra "-".
+  const std::string ua8 = std::string("Ditado/") + DITADO_VERSION + " (Windows 11)";
+  const std::wstring ua = U8(ua8);
+  HINTERNET s = InternetOpenW(ua.c_str(), INTERNET_OPEN_TYPE_DIRECT, nullptr, nullptr, 0);
   DWORD tmo = (DWORD)cfg.timeout_ms + 5000;  // folga p/ o cliente nunca travar se o nó travar
   InternetSetOptionW(s, INTERNET_OPTION_CONNECT_TIMEOUT, &tmo, 4);
   InternetSetOptionW(s, INTERNET_OPTION_RECEIVE_TIMEOUT, &tmo, 4);
@@ -45,7 +49,7 @@ Result Transcrever(const Config& cfg, const std::string& wav) {
     return r;
   }
   if (lg::Verbose())
-    lg::Info("→ enviado: POST " + W8(url) + " corpo=" + std::to_string(wav.size()) + " bytes");
+    lg::Info("→ enviado: POST " + W8(url) + " cliente=" + ua8 + " corpo=" + std::to_string(wav.size()) + " bytes");
   HINTERNET c = InternetConnectW(s, u.lpszHostName, u.nPort, nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
   HINTERNET req = c ? HttpOpenRequestW(c, L"POST", u.lpszUrlPath, nullptr, nullptr, nullptr,
                                        INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION, 0)
