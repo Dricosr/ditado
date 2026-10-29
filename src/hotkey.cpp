@@ -12,6 +12,7 @@ struct Parsed {
 Parsed g_p;
 std::function<void(const KeyEvent&)> g_cb;
 HHOOK g_hook = nullptr;
+bool g_active = false;  // estado do combo (não da tecla isolada)
 
 UINT Vk1(const std::string& t) {  // "a"->A, "f1"->VK_F1, "space"...
   if (t == "space") return VK_SPACE;
@@ -60,19 +61,31 @@ Parsed Parse(const std::string& combo) {
 }
 
 bool Down(UINT vk) { return (GetAsyncKeyState((int)vk) & 0x8000) != 0; }
+bool Held(UINT comboVk, UINT eventVk, bool eventDown) {
+  return Base(comboVk) == Base(eventVk) ? eventDown : Down(comboVk);
+}
 
 LRESULT CALLBACK LL(int code, WPARAM w, LPARAM l) {
   if (code == HC_ACTION && g_cb) {
     auto& k = *(KBDLLHOOKSTRUCT*)l;
     bool down = !(k.flags & LLKHF_UP);
-    bool mine = false;
-    for (UINT v : g_p.vks) {  // vks só contém a tecla não-modificadora do combo; vkCode de letra já é base ✓
-      if (v == k.vkCode || v == Base(k.vkCode)) mine = true;
+    const UINT ev = Base(k.vkCode);
+    // O combo é "todas as teclas exigidas estão pressionadas". O estado da tecla do
+    // próprio evento usa o flag down, não GetAsyncKeyState (que pode já ter mudado).
+    // Isso faz soltar Ctrl/Shift/Alt também encerrar a gravação.
+    const bool ctrl = Held(VK_CONTROL, ev, down);
+    const bool shift = Held(VK_SHIFT, ev, down);
+    const bool alt = Held(VK_MENU, ev, down);
+    const bool win = Held(VK_LWIN, ev, down);
+    bool keys = true;
+    for (UINT v : g_p.vks)
+      if (!Held(v, ev, down)) { keys = false; break; }
+    const bool active = (!g_p.need_ctrl || ctrl) && (!g_p.need_shift || shift) &&
+                        (!g_p.need_alt || alt) && (!g_p.need_win || win) && keys;
+    if (active != g_active) {
+      g_active = active;
+      g_cb({k.vkCode, ctrl, shift, alt, win, active});
     }
-    bool mods_ok = (!g_p.need_ctrl || Down(VK_CONTROL)) && (!g_p.need_shift || Down(VK_SHIFT)) &&
-                   (!g_p.need_alt || Down(VK_MENU)) && (!g_p.need_win || Down(VK_LWIN));
-    if (mine && mods_ok)
-      g_cb({k.vkCode, Down(VK_CONTROL), Down(VK_SHIFT), Down(VK_MENU), Down(VK_LWIN), down});
   }
   return CallNextHookEx(nullptr, code, w, l);
 }
@@ -82,6 +95,7 @@ namespace hotkey {
 bool Start(const std::string& combo, const std::function<void(const KeyEvent&)>& cb) {
   g_cb = cb;
   g_p = Parse(combo);
+  g_active = false;
   g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LL, GetModuleHandleW(nullptr), 0);
   if (!g_hook) lg::Error("SetWindowsHookEx(WH_KEYBOARD_LL) falhou: " + std::to_string(GetLastError()));
   return g_hook != nullptr;
@@ -90,6 +104,7 @@ void Stop() {
   if (g_hook) UnhookWindowsHookEx(g_hook);
   g_hook = nullptr;
   g_cb = nullptr;
+  g_active = false;
 }
 bool SetCombo(const std::string& combo) {
   bool was = g_hook != nullptr;

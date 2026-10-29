@@ -221,7 +221,7 @@ Detalhes de implementação, limites e correções: **[docs/ESPECIFICACAO.md](do
 
 ## Solução de problemas
 
-- **Microfone indisponível / `AUDCLNT_E_DEVICE_INVALIDATED`**: outro app (Teams, Webex, etc.) pode estar usando o dispositivo de forma exclusiva. Feche-o ou escolha outro dispositivo em Opções. O app tenta reabrir a cada gravação e mostra um balão se falhar.
+- **Microfone indisponível / `AUDCLNT_E_DEVICE_INVALIDATED`**: outro app (Teams, Webex, etc.) pode estar usando o dispositivo de forma exclusiva. Feche-o ou escolha outro dispositivo em Opções. O app tenta reabrir a cada gravação; desde a 0.3.1 ele ignora o auto-repeat do keydown e mostra **uma** notificação por falha, não dezenas.
 - **WAVs antigos curtos/vazios**: eram do build anterior (bug de frames vs bytes, corrigido na 0.2.1). Os novos WAVs têm a duração real.
 - **Cliente `-` no gate**: o campo é `agent` (User-Agent). O app e o gate-test agora enviam identificação; jobs antigos de clientes sem header ficam sem cliente.
 - **Gate pausado/bloqueado**: uso externo do Strata pode parar os motores; a lane de transcrição é paralela. O painel mostra o motivo.
@@ -240,6 +240,7 @@ Detalhes de implementação, limites e correções: **[docs/ESPECIFICACAO.md](do
 | 0.2.1 | captura completa (frames vs bytes), stream preparado, nomes reais dos dispositivos |
 | 0.2.2 | cliente explícito no gate (`User-Agent Ditado/<versão> (Windows 11)`) |
 | 0.3.0 | pop in/out, loop de processamento, fila de vários ditados na ordem, histórico diário com copiar |
+| 0.3.1 | fim das notificações repetidas de microfone (auto-repeat do keydown e uma notificação por falha) |
 
 ---
 

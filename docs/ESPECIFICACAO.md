@@ -1,6 +1,6 @@
 ﻿# ditado — especificação do sistema
 
-**Estado:** versão **0.3.0** · atualizado em **28/10/2026**  
+**Estado:** versão **0.3.1** · atualizado em **28/10/2026**  
 **Repositório:** <https://github.com/Dricosr/ditado> · **Release:** <https://github.com/Dricosr/ditado/releases/tag/v0.3.0>  
 **Licença:** MIT (ver `LICENSE`).
 
@@ -82,7 +82,7 @@ O usuário pode gravar novamente enquanto jobs anteriores estão na fila. O work
 | `src/main.cpp` | single-instance, config, hook, máquina de estados, fila, worker, tray, modos de teste |
 | `src/audio.{h,cpp}` | WASAPI shared, downmix, resample linear para 16 kHz, stop/flush, preparação do client |
 | `src/gate.{h,cpp}` | `POST /v1/transcricao`, query string, `User-Agent`, leitura do JSON de resposta |
-| `src/hotkey.{h,cpp}` | `WH_KEYBOARD_LL`, parse do combo, normalização L/R, callback down/up |
+| `src/hotkey.{h,cpp}` | `WH_KEYBOARD_LL`, parse do combo, normalização L/R, estado ativo do combo (soltar Ctrl/Shift/Alt também encerra), callback down/up |
 | `src/inject.{h,cpp}` | `SendInput` Unicode; modo clipboard + Ctrl+V com restauração; copiar para clipboard |
 | `src/config.{h,cpp}` | `config.json`, defaults, escrita atômica, `Dump()`, `ToQuery()` |
 | `src/settings.{h,cpp}` | janela de Opções (`CreateWindowExW`), lista de dispositivos com nome amigável |
@@ -389,6 +389,7 @@ O binário `tools/gate-test/bin/pub/T.exe` é publicado para `win-x64` **framewo
 | 0.2.1 | correção da captura (frames vs bytes), stream preparado, nomes reais dos dispositivos, log opcional real |
 | 0.2.2 | cliente explícito no gate (`User-Agent Ditado/<versão> (Windows 11)`) |
 | 0.3.0 | pop in/out, loop de processamento, fila de vários ditados na ordem e histórico diário com copiar |
+| 0.3.1 | fim das notificações repetidas de microfone (auto-repeat do keydown e uma notificação por falha) |
 
 ---
 

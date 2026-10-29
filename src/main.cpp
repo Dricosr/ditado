@@ -159,27 +159,45 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
 
   // ---- máquina de estados: Ocioso → Gravando → (fila) Transcrevendo → Ocioso ----
   enum class Estado { Ocioso, Gravando } est = Estado::Ocioso;
+  bool teclaDown = false;       // evita o auto-repeat do keydown
+  bool capturando = false;
+  bool micErroMostrado = false; // uma notificação por falha, até uma captura dar certo
   auto on_key = [&](const KeyEvent& e) {
-    if (e.down && est == Estado::Ocioso) {
+    if (e.down) {
+      if (teclaDown) return;  // auto-repeat: a tecla continua fisicamente pressionada
+      teclaDown = true;
+      if (est != Estado::Ocioso) return;
       est = Estado::Gravando;
       g_rec = true;
       tray::SetTooltip(L"gravando… (solte para transcrever)");
       if (!audio::Start(W(g_cfg.dispositivo))) {
         est = Estado::Ocioso;
         g_rec = false;
+        capturando = false;
         g_rec_cv.notify_all();
         lg::Error("não consegui iniciar a captura — veja o dispositivo em Opções");
-        tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
+        if (!micErroMostrado) {
+          tray::Balloon(L"ditado", L"Microfone indisponível. Escolha outro dispositivo em Opções.");
+          micErroMostrado = true;
+        }
         UpdateTip();
         return;
       }
-      som::PopIn();  // captura já está ligada; o pop é o feedback de "gravando"
-    } else if (!e.down && est == Estado::Gravando) {
+      capturando = true;
+      micErroMostrado = false;  // captura voltou a funcionar
+      som::PopIn();             // captura já está ligada; o pop é o feedback de "gravando"
+      return;
+    }
+
+    if (!teclaDown) return;
+    teclaDown = false;
+    if (est == Estado::Gravando && capturando) {
       est = Estado::Ocioso;
       g_rec = false;
       g_rec_cv.notify_all();
       audio::Stop();
       auto pcm = audio::Flush();
+      capturando = false;
       if (lg::Verbose())
         lg::Info("entrada: tecla '" + g_cfg.tecla + "' solta — gravado " + std::to_string(pcm.size()) + " amostras de '" + g_cfg.dispositivo + "'");
       som::PopOut();
@@ -201,6 +219,10 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
         Sleep(2000);
         if (!g_rec.load() && g_pending.load() > 0) som::Running(true);
       }).detach();
+    } else {
+      est = Estado::Ocioso;
+      g_rec = false;
+      UpdateTip();
     }
   };
   hotkey::Start(g_cfg.tecla, on_key);
@@ -243,7 +265,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     return 0;
   }
 
-  auto open_settings = [] {
+  auto open_settings = [&] {
     Config c = g_cfg;
     tray::SetTooltip(L"configurando…");
     settings::Show(nullptr, c);
@@ -256,7 +278,7 @@ int APIENTRY wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
       lg::Verbose(g_cfg.log_local);
       if (combo) hotkey::SetCombo(g_cfg.tecla);
       if (start) SetAutostart(g_cfg.autostart);
-      if (dev) audio::Prepare(W(g_cfg.dispositivo));
+      if (dev) { audio::Prepare(W(g_cfg.dispositivo)); micErroMostrado = false; }
       lg::Info("config salva — opções:\n" + g_cfg.Dump());
     }
     UpdateTip();

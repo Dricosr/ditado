@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.28)
-project(ditado VERSION 0.3.0 LANGUAGES CXX RC)
+project(ditado VERSION 0.3.1 LANGUAGES CXX RC)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 configure_file(src/version.h.in ${CMAKE_BINARY_DIR}/gen/version.h @ONLY)
